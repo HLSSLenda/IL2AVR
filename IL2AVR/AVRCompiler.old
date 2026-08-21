@@ -1,0 +1,714 @@
+using Mono.Cecil;
+using Mono.Cecil.Cil;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace IL2AVR;
+
+public class AVRCompiler
+{
+    public AVRCompiler(IProcessor processor, ModuleDefinition mod)
+    {
+        Processor = processor;
+        ModuleDefinition corelib = (typeSystem = new((module = mod).TypeSystem)).Object.Module;
+        PointerType voidPointer = new(mod.TypeSystem.Void);
+        canThrowAttribute = corelib.GetType("System.Runtime.CanThrowAttribute");
+        intrinsicAttribute = corelib.GetType("System.Runtime.CompilerServices.IntrinsicAttribute");
+        interruptAttribute = corelib.GetType("System.Runtime.InterruptAttribute");
+        throwsAttribute = corelib.GetType("System.Runtime.ThrowsAttribute");
+        typeAsAttribute = corelib.GetType("System.Runtime.Intrinsics.AVR.TypeAsAttribute");
+        // May IL2AVR allow you to customize memory allocation under your control.
+        // Very cool for debugging purposes (maybe writing every allocation to the serial line?)
+        alloc = new((mod.GetType("System.Runtime.InteropServices.NativeMemory") ??
+            corelib.GetType("System.Runtime.InteropServices.NativeMemory")).Methods.First(method =>
+                method.Name == "Alloc" && method.GenericParameters.Count == 0 &&
+                method.ReturnType == voidPointer &&
+                method.Parameters.Count == 1 &&
+                method.Parameters[0].ParameterType == mod.TypeSystem.IntPtr));
+    }
+    public readonly IProcessor Processor;
+    private readonly HashSet<AnalyzedMethod> analyzedMethods = [];
+    private readonly HashSet<CompiledMethod> compiledMethods = [];
+    private readonly TypeDefinition intrinsicAttribute;
+    private readonly TypeDefinition canThrowAttribute;
+    private readonly TypeDefinition interruptAttribute;
+    private readonly TypeDefinition throwsAttribute;
+    private readonly TypeDefinition typeAsAttribute;
+    private readonly ClosedTypeSystem typeSystem;
+    private readonly ClosedMethod alloc;
+    private readonly ModuleDefinition module;
+
+    private bool IsStaticVoid(MethodDefinition method) =>
+        !method.HasGenericParameters && !method.HasParameters && method.IsStatic &&
+        method.ReturnType == module.TypeSystem.Void;
+    public ICollection<CompiledMethod> Compile(CompileOptions options)
+    {
+        
+        /*foreach (CustomAttriArduinoSharpbute? interrupt in module.Types
+            .SelectMany(type => type.Methods)
+            .Select(method => (Method: method, InterruptInfo: method.CustomAttributes.FirstOrDefault(attr => attr.AttributeType == interruptAttribute)))
+            .Where(info => IsStaticVoid(info.Method) && info.InterruptInfo is not null))
+        {
+            interruptAttribute.Fields[0].Resolve().
+        }*/
+        Dictionary<LateReference, (ClosedMethod Method, IList<int> Indexes)> references = [];
+        HashSet<ClosedType> types = [
+            typeSystem.Object,
+            typeSystem.Void,
+            typeSystem.Object.Module.GetType("System.ValueType").Close()];
+        CompiledMethod main;
+        List<OpCode> prologue = [
+            new(OpCodeId.Ldi, new ValueOperand(0), new ValueOperand(Processor.RamEnd.High())),
+            new(OpCodeId.Out, new ValueOperand(Processor.SPH), new ValueOperand(0)),
+            new(OpCodeId.Ldi, new ValueOperand(0), new ValueOperand(Processor.RamEnd.Low())),
+            new(OpCodeId.Out, new ValueOperand(Processor.SPL), new ValueOperand(0))
+        ];
+        if (module.EntryPoint is null)
+        {
+            ClosedMethod? setupMethod = null, loopMethod = null;
+            foreach (TypeDefinition type in module.Types.Where(static type => !type.ContainsGenericParameter))
+            {
+                MethodDefinition[] methods = [..type.Methods
+                    .Where(method => (method.Name == "Loop" || method.Name == "Setup") && IsStaticVoid(method))
+                    .OrderBy(method => method.Name)];
+                if (methods.Length != 2)
+                    throw new InvalidOperationException();
+                loopMethod = new(methods[0]);
+                setupMethod = new(methods[1]);
+            }
+            if (setupMethod is null)
+                throw new InvalidOperationException();
+            main = CompileMethod(setupMethod, options, references, prologue: prologue);
+            CompiledMethod loopInfo = CompileMethod(loopMethod!, options, references);
+            main.OpCodes[^ - 1] = new(OpCodeId.Rjmp, new CallOperand(loopMethod!));
+            loopInfo.OpCodes[^ - 1] = new(OpCodeId.Rjmp, new ValueOperand((byte)-loopInfo.OpCodes.Sum(code => OpCode.Size(code.Id))));
+        }
+        else
+        {
+            main = CompileMethod(new(module.EntryPoint), options, references, prologue: prologue);
+            main.OpCodes[^ - 1] = new(OpCodeId.Nop);    // replace ret
+            main.OpCodes.Add(new(OpCodeId.Rjmp, new ValueOperand((byte)-OpCode.Size(OpCodeId.Nop))));
+        }
+    }
+    private static void AddInterfaces(ISet<ClosedType> types, ClosedType type)
+    {
+        if (type.IsInterface && !types.Add(type))
+            return;
+        Stack<ClosedType> dfsStack = new(type.Interfaces);
+        while (dfsStack.TryPop(out ClosedType? t))
+            if (types.Add(t))
+                foreach (ClosedType interf in t.Interfaces)
+                    dfsStack.Push(interf);
+    }
+    private static void AddType(ISet<ClosedType> types, ClosedType type)
+    {
+        if (!types.Add(type))
+            return;
+        AddInterfaces(types, type);
+        if (!type.IsValueType)
+        {
+            ClosedType? baseType;
+            while ((baseType = type.BaseType) is not null && types.Add(baseType))
+                AddInterfaces(types, baseType);
+        }
+    }
+    private void AnalyzeMethod(
+        CompileOptions options,
+        MethodReference method,
+        ISet<LateReference> references,
+        ISet<ClosedType> types)
+    {
+        ClosedMethod m = new(method);
+        AddType(types, m.ReturnType);
+        foreach (ClosedType type in m.GenericArguments)
+            AddType(types, type);
+        foreach (ClosedParameter parameter in m.Parameters)
+            AddType(types, parameter.ParameterType);
+        bool canInline;
+        if (m.HasBody)
+        {
+            foreach (VariableDefinition variable in m.Body.Variables)
+                AddType(types, variable.VariableType.Close());
+            foreach (Instruction instruction in m.Body.Instructions)
+            {
+                switch (instruction.OpCode.Code)
+                {
+                    case Code.Call:
+                    case Code.Callvirt:
+                        AnalyzeMethod(options, (MethodReference)instruction.Operand, references, types);
+                        break;
+                    case Code.Calli:
+                        CallSite site = (CallSite)instruction.Operand;
+                        AddType(types, site.ReturnType.Close());
+                        foreach (ParameterDefinition parameter in site.Parameters)
+                            AddType(types, parameter.ParameterType.Close());
+                        break;
+                    case Code.Ldstr:
+                        references.Add(new((string)instruction.Operand));
+                        break;
+                    case Code.Ldsfld:
+                        references.Add(new(new ClosedField((FieldReference)instruction.Operand)));
+                        break;
+                }
+            }
+        }
+        else
+            canInline = options.Inline && m.UnderlyingMethod.AggressiveInlining;
+        analyzedMethods.Add(new(m, canInline,));
+    }
+    private readonly Dictionary<MethodReference, Intrinsic> defaultIntrinsics;
+    private CompiledMethod CompileMethod(
+        ClosedMethod method,
+        CompileOptions options,
+        LocalAllocator? locals = null,
+        IReadOnlyList<IValue>? args = null,
+        IList<OpCode>? prologue = null)
+    {
+        bool isInline = locals is null;
+        if (!isInline)
+        {
+            try
+            {
+                return compiledMethods.First(info => method == info.Method);
+            }
+            catch (InvalidOperationException)
+            {
+            }
+        }
+        if (method.HasBody)
+        {
+            List<IValue> ir = new(1);
+            IL2AVRState state = new(method, locals, CILStack: new());
+            
+            foreach (Instruction instruction in method.Body.Instructions)
+            {
+                switch (instruction.OpCode.Code)
+                {
+                    case Code.Nop:
+                        ir.Add(new OpCode(OpCodeId.Nop));
+                        break;
+                    case Code.Break:
+                        if (Processor.HasBreak)
+                            ir.Add(new OpCode(OpCodeId.ExtBreak));
+                        break;
+                    case Code.Ldarg_0:
+                        Ldarg(state, 0);
+                        break;
+                    case Code.Ldarg_1:
+                        Ldarg(state, 1);
+                        break;
+                    case Code.Ldarg_2:
+                        Ldarg(state, 2);
+                        break;
+                    case Code.Ldarg_3:
+                        Ldarg(state, 3);
+                        break;
+                    case Code.Ldloc_0:
+                        Ldloc(state, 0);
+                        break;
+                    case Code.Ldloc_1:
+                        Ldloc(state, 1);
+                        break;
+                    case Code.Ldloc_2:
+                        Ldloc(state, 2);
+                        break;
+                    case Code.Ldloc_3:
+                        Ldloc(state, 3);
+                        break;
+                    case Code.Stloc_0:
+                        break;
+                    case Code.Stloc_1:
+                        break;
+                    case Code.Stloc_2:
+                        break;
+                    case Code.Stloc_3:
+                        break;
+                    case Code.Ldarg_S:
+                        break;
+                    case Code.Ldarg:
+                        Ldarg(state, (ParameterDefinition)instruction.Operand);
+                        break;
+                    case Code.Ldarga_S:
+                        break;
+                    case Code.Starg_S:
+                        break;
+                    case Code.Ldloc_S:
+                    case Code.Ldloc:
+                        Ldloc(state, ((VariableDefinition)instruction.Operand).Index);
+                        break;
+                    case Code.Ldloca_S:
+                        break;
+                    case Code.Stloc_S:
+                        break;
+                    case Code.Ldnull:
+                        state.CILStack.Push(new Null(typeSystem));
+                        break;
+                    case Code.Ldc_I4_M1:
+                        state.CILStack.Push(new Number(typeSystem.Int32, unchecked((uint)-1)));
+                        break;
+                    case Code.Ldc_I4_0:
+                        state.CILStack.Push(new Number(typeSystem.Int32, 0));
+                        break;
+                    case Code.Ldc_I4_1:
+                        state.CILStack.Push(new Number(typeSystem.Int32, 1));
+                        break;
+                    case Code.Ldc_I4_2:
+                        state.CILStack.Push(new Number(typeSystem.Int32, 2));
+                        break;
+                    case Code.Ldc_I4_3:
+                        state.CILStack.Push(new Number(typeSystem.Int32, 3));
+                        break;
+                    case Code.Ldc_I4_4:
+                        state.CILStack.Push(new Number(typeSystem.Int32, 4));
+                        break;
+                    case Code.Ldc_I4_5:
+                        state.CILStack.Push(new Number(typeSystem.Int32, 5));
+                        break;
+                    case Code.Ldc_I4_6:
+                        state.CILStack.Push(new Number(typeSystem.Int32, 6));
+                        break;
+                    case Code.Ldc_I4_7:
+                        state.CILStack.Push(new Number(typeSystem.Int32, 7));
+                        break;
+                    case Code.Ldc_I4_8:
+                        state.CILStack.Push(new Number(typeSystem.Int32, 8));
+                        break;
+                    case Code.Ldc_I4_S:
+                        state.CILStack.Push(new Number(typeSystem.Int32, (ulong)(sbyte)instruction.Operand));
+                        break;
+                    case Code.Ldc_I4:
+                        state.CILStack.Push(new Number(typeSystem.Int32, (ulong)(int)instruction.Operand));
+                        break;
+                    case Code.Ldc_I8:
+                        state.CILStack.Push(new Number(typeSystem.Int64, (ulong)instruction.Operand));
+                        break;
+                    case Code.Ldc_R4:
+                        state.CILStack.Push(new Number(typeSystem.Single, ((float)instruction.Operand).Reinterpret<float, ulong>()));
+                        break;
+                    case Code.Ldc_R8:
+                        state.CILStack.Push(new Number(typeSystem.Single, ((double)instruction.Operand).Reinterpret<double, ulong>()));
+                        break;
+                    case Code.Dup:
+                        state.CILStack.Push(state.CILStack.Peek());
+                        break;
+                    case Code.Pop:
+                        state.CILStack.Pop();
+                        break;
+                    case Code.Jmp:
+                        break;
+                    case Code.Call:
+                        MethodReference calledMethod = (MethodReference)instruction.Operand;
+                        ir.Add(new Call(new(calledMethod), []));
+                        break;
+                    case Code.Calli:
+                        // TODO: Load to Z and call
+                        break;
+                    case Code.Ret:
+                        if (method.ReturnType == typeSystem.Void)
+                            ir.Add(new Return());
+                        else if (state.CILStack.TryPop(out IValue? result))
+                            ir.Add(new Return(result));
+                        else
+                            throw new WtfException();
+                        break;
+                    case Code.Br_S:
+                        break;
+                    case Code.Brfalse_S:
+                        break;
+                    case Code.Brtrue_S:
+                        break;
+                    case Code.Beq_S:
+                        break;
+                    case Code.Bge_S:
+                        break;
+                    case Code.Bgt_S:
+                        break;
+                    case Code.Ble_S:
+                        break;
+                    case Code.Blt_S:
+                        break;
+                    case Code.Bne_Un_S:
+                        break;
+                    case Code.Bge_Un_S:
+                        break;
+                    case Code.Bgt_Un_S:
+                        break;
+                    case Code.Ble_Un_S:
+                        break;
+                    case Code.Blt_Un_S:
+                        break;
+                    case Code.Br:
+                        break;
+                    case Code.Brfalse:
+                        break;
+                    case Code.Brtrue:
+                        break;
+                    case Code.Beq:
+                        break;
+                    case Code.Bge:
+                        break;
+                    case Code.Bgt:
+                        break;
+                    case Code.Ble:
+                        break;
+                    case Code.Blt:
+                        break;
+                    case Code.Bne_Un:
+                        break;
+                    case Code.Bge_Un:
+                        break;
+                    case Code.Bgt_Un:
+                        break;
+                    case Code.Ble_Un:
+                        break;
+                    case Code.Blt_Un:
+                        break;
+                    case Code.Switch:
+                        break;
+                    case Code.Ldind_I1:
+                        break;
+                    case Code.Ldind_U1:
+                        break;
+                    case Code.Ldind_I2:
+                        break;
+                    case Code.Ldind_U2:
+                        break;
+                    case Code.Ldind_I4:
+                        break;
+                    case Code.Ldind_U4:
+                        break;
+                    case Code.Ldind_I8:
+                        break;
+                    case Code.Ldind_I:
+                        break;
+                    case Code.Ldind_R4:
+                        break;
+                    case Code.Ldind_R8:
+                        break;
+                    case Code.Ldind_Ref:
+                        break;
+                    case Code.Stind_Ref:
+                        break;
+                    case Code.Stind_I1:
+                        break;
+                    case Code.Stind_I2:
+                        break;
+                    case Code.Stind_I4:
+                        break;
+                    case Code.Stind_I8:
+                        break;
+                    case Code.Stind_R4:
+                        break;
+                    case Code.Stind_R8:
+                        break;
+                    case Code.Add:
+                        state.CILStack.Push(Operator.Add(typeSystem,
+                            state.CILStack.Pop() ?? throw new WtfException(),
+                            state.CILStack.Pop() ?? throw new WtfException()));
+                        break;
+                    case Code.Sub:
+                        break;
+                    case Code.Mul:
+                        break;
+                    case Code.Div:
+                        break;
+                    case Code.Div_Un:
+                        break;
+                    case Code.Rem:
+                        break;
+                    case Code.Rem_Un:
+                        break;
+                    case Code.And:
+                        break;
+                    case Code.Or:
+                        break;
+                    case Code.Xor:
+                        break;
+                    case Code.Shl:
+                        break;
+                    case Code.Shr:
+                        break;
+                    case Code.Shr_Un:
+                        break;
+                    case Code.Neg:
+                        break;
+                    case Code.Not:
+                        break;
+                    case Code.Conv_I1:
+                        break;
+                    case Code.Conv_I2:
+                        break;
+                    case Code.Conv_I4:
+                        break;
+                    case Code.Conv_I8:
+                        break;
+                    case Code.Conv_R4:
+                        break;
+                    case Code.Conv_R8:
+                        break;
+                    case Code.Conv_U4:
+                        break;
+                    case Code.Conv_U8:
+                        break;
+                    case Code.Callvirt:
+                        break;
+                    case Code.Cpobj:
+                        break;
+                    case Code.Ldobj:
+                        break;
+                    case Code.Ldstr:
+                        string str = (string)instruction.Operand;
+                        state.CILStack.Push(new Text(typeSystem, str));
+                        break;
+                    case Code.Newobj:
+                        break;
+                    case Code.Castclass:
+                        break;
+                    case Code.Isinst:
+                        break;
+                    case Code.Conv_R_Un:
+                        break;
+                    case Code.Ldfld:
+                        ClosedField fld = new((FieldReference)instruction.Operand);
+                        fld.
+                        break;
+                    case Code.Ldflda:
+                        break;
+                    case Code.Stfld:
+                        break;
+                    case Code.Ldsfld:
+                        break;
+                    case Code.Ldsflda:
+                        break;
+                    case Code.Stsfld:
+                        break;
+                    case Code.Stobj:
+                        break;
+                    case Code.Conv_Ovf_I1_Un:
+                        break;
+                    case Code.Conv_Ovf_I2_Un:
+                        break;
+                    case Code.Conv_Ovf_I4_Un:
+                        break;
+                    case Code.Conv_Ovf_I8_Un:
+                        break;
+                    case Code.Conv_Ovf_U1_Un:
+                        break;
+                    case Code.Conv_Ovf_U2_Un:
+                        break;
+                    case Code.Conv_Ovf_U4_Un:
+                        break;
+                    case Code.Conv_Ovf_U8_Un:
+                        break;
+                    case Code.Conv_Ovf_I_Un:
+                        break;
+                    case Code.Conv_Ovf_U_Un:
+                        break;
+                    case Code.Box:
+                    case Code.Rethrow:
+                    case Code.Throw:
+                    case Code.Unbox:
+                    case Code.Unbox_Any:
+                        throw new NotSupportedException("Boxing and exception **(re)throwing** are not supported!");
+                    case Code.Newarr:
+                        state.CILStack.Push(new Call(alloc, state.CILStack.Pop()));
+                        break;
+                    case Code.Ldlen:
+                        break;
+                    case Code.Ldelema:
+                        break;
+                    case Code.Ldelem_I1:
+                        break;
+                    case Code.Ldelem_U1:
+                        break;
+                    case Code.Ldelem_I2:
+                        break;
+                    case Code.Ldelem_U2:
+                        break;
+                    case Code.Ldelem_I4:
+                        break;
+                    case Code.Ldelem_U4:
+                        break;
+                    case Code.Ldelem_I8:
+                        break;
+                    case Code.Ldelem_I:
+                        break;
+                    case Code.Ldelem_R4:
+                        break;
+                    case Code.Ldelem_R8:
+                        break;
+                    case Code.Ldelem_Ref:
+                        break;
+                    case Code.Stelem_I:
+                        break;
+                    case Code.Stelem_I1:
+                        break;
+                    case Code.Stelem_I2:
+                        break;
+                    case Code.Stelem_I4:
+                        break;
+                    case Code.Stelem_I8:
+                        break;
+                    case Code.Stelem_R4:
+                        break;
+                    case Code.Stelem_R8:
+                        break;
+                    case Code.Stelem_Ref:
+                        break;
+                    case Code.Ldelem_Any:
+                        break;
+                    case Code.Stelem_Any:
+                        break;
+                    case Code.Conv_Ovf_I1:
+                        break;
+                    case Code.Conv_Ovf_U1:
+                        break;
+                    case Code.Conv_Ovf_I2:
+                        break;
+                    case Code.Conv_Ovf_U2:
+                        break;
+                    case Code.Conv_Ovf_I4:
+                        break;
+                    case Code.Conv_Ovf_U4:
+                        break;
+                    case Code.Conv_Ovf_I8:
+                        break;
+                    case Code.Conv_Ovf_U8:
+                        break;
+                    case Code.Refanyval:
+                        break;
+                    case Code.Ckfinite:
+                        break;
+                    case Code.Mkrefany:
+                        break;
+                    case Code.Ldtoken:
+                        break;
+                    case Code.Conv_U2:
+                        break;
+                    case Code.Conv_U1:
+                        break;
+                    case Code.Conv_I:
+                        break;
+                    case Code.Conv_Ovf_I:
+                        break;
+                    case Code.Conv_Ovf_U:
+                        break;
+                    case Code.Add_Ovf:
+                        break;
+                    case Code.Add_Ovf_Un:
+                        break;
+                    case Code.Mul_Ovf:
+                        break;
+                    case Code.Mul_Ovf_Un:
+                        break;
+                    case Code.Sub_Ovf:
+                        break;
+                    case Code.Sub_Ovf_Un:
+                        break;
+                    case Code.Endfinally:
+                        break;
+                    case Code.Leave:
+                        break;
+                    case Code.Leave_S:
+                        break;
+                    case Code.Stind_I:
+                        break;
+                    case Code.Conv_U:
+                        break;
+                    case Code.Arglist:
+                        break;
+                    case Code.Ceq:
+                        break;
+                    case Code.Cgt:
+                        break;
+                    case Code.Cgt_Un:
+                        break;
+                    case Code.Clt:
+                        break;
+                    case Code.Clt_Un:
+                        break;
+                    case Code.Ldftn:
+                        MethodDefinition referencedMethod = ((MethodReference)instruction.Operand).Resolve();
+                        
+                        break;
+                    case Code.Ldvirtftn:
+                        break;
+                    case Code.Ldarga:
+                        break;
+                    case Code.Starg:
+                        break;
+                    case Code.Ldloca:
+                        break;
+                    case Code.Stloc:
+                        break;
+                    case Code.Localloc:
+                        // localloc == stackalloc; localloc must not use registers
+                        IValue value = state.CILStack.Pop() ?? throw new WtfException();
+                        if (value is Number number)
+                            state.CILStack.Push(state.Locals.Add(module.TypeSystem, typeSystem.Byte, MemoryLocation.SRAM, (ushort)number.Value));
+                        break;
+                    case Code.Endfilter:
+                        break;
+                    case Code.Unaligned:
+                        break;
+                    case Code.Volatile:
+                        break;
+                    case Code.Tail:
+                        break;
+                    case Code.Initobj:
+                        break;
+                    case Code.Constrained:
+                        break;
+                    case Code.Cpblk:
+                        break;
+                    case Code.Initblk:
+                        break;
+                    case Code.No:
+                        break;
+                    case Code.Sizeof:
+                        state.CILStack.Push(new Number(typeSystem.Byte, ((TypeReference)instruction.Operand).Close().Size));
+                        break;
+                    case Code.Refanytype:
+                        break;
+                    case Code.Readonly:
+                        break;
+                    default:
+                        throw new NotImplementedException(instruction.ToString());
+                }
+            }
+        }
+        else if (intrinsics.TryGetValue(method, out Intrinsic? intrinsic))
+        {
+            intrinsic(method, );
+        }
+        else 
+            throw new InvalidOperationException($"Method {method.FullName} has no body and it isn't marked as an intrinsic!");
+        foreach ((int index, MethodDefinition calledMethod) in referencedMethods)
+        {
+            CompiledMethod info = CompileMethod(calledMethod, intrinsics, references);
+            if (called)
+                state.OpCodes[index] = Processor.Rcall((short)(info.Address - (startingAddress + state.OpCodes.Take(index).Sum(static opcode => opcode.Size))));
+            else
+            {
+                state.OpCodes[index] = Processor.Lds(30, info.Address.High());
+                state.OpCodes[index + 1] = Processor.Lds(31, info.Address.Low());
+            }
+        }
+        return new(method, state.OpCodes);
+    }
+    
+    private static void Ldloc(IL2AVRState state, int index) =>
+        state.CILStack.Push(state.Locals.Variables[index]);
+    private static void Ldarg(IL2AVRState state, ParameterDefinition parameter) =>
+        state.CILStack.Push(state.Locals.Parameters[parameter.Index]);
+    private static void Ldarg(IL2AVRState state, int index)
+    {
+        if (state.Method.IsStatic)
+            state.CILStack.Push(state.Locals.Parameters[index]);
+        else
+            state.CILStack.Push(index == 0 ?
+                new(MemoryLocation.Register, 2, 2) :
+                state.Locals.Parameters[index - 1]);
+    }
+}

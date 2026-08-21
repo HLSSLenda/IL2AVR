@@ -1,0 +1,15 @@
+namespace System;
+
+public interface IConvertible
+{
+    TypeCode GetTypeCode();
+    bool ToBoolean();
+    byte ToByte();
+    short ToInt16();
+    int ToInt32();
+    long ToInt64();
+    sbyte ToSByte();
+    ushort ToUInt16();
+    uint ToUInt32();
+    ulong ToUInt64();
+}
