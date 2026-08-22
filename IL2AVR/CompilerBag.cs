@@ -8,7 +8,9 @@ namespace IL2AVR;
 /// <seealso cref="Compiler" />
 public ref struct CompilerBag
 {
+    /// <summary>The logger used for the compiler.</summary>
     public readonly ILogger Logger;
+    /// <summary>The diagnostics collection.</summary>
     public readonly CompilerDiagnosticCollection Diagnostics;
     public readonly CompilerOptions Options;
 

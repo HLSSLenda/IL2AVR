@@ -4,6 +4,9 @@ using System.Collections.Generic;
 using System.Linq;
 namespace IL2AVR;
 
+/// <summary>A type that allows the compiler to report diagnostics (fatal, error, warning, information, debug) back to the user.</summary>
+/// <param name="logLevel">The current log level to enable.</param>
+/// <param name="warnAsError">If <see langword="true" />, then every <see cref="Warning(ModuleDefinition, IL2AVR.CompilerDiagnosticId, IL2AVR.ClosedType?, IL2AVR.ClosedMethod?, object[])" /> is equivalent to <see cref="Warning(ModuleDefinition, IL2AVR.CompilerDiagnosticId, IL2AVR.ClosedType?, IL2AVR.ClosedMethod?, object[])" />.</param>
 public readonly ref struct CompilerDiagnosticCollection(
     CompilerDiagnosticKind logLevel = CompilerDiagnosticKind.Fatal | CompilerDiagnosticKind.Error | CompilerDiagnosticKind.Warning,
     bool warnAsError = false

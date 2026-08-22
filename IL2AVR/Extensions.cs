@@ -92,6 +92,58 @@ public static class Extensions
             return typeSystem.IntPtr;
         return type;
     }
+    public static MemberReference GetMember(ModuleDefinition module, ReadOnlySpan<char> name)
+    {
+        Stack<ModuleDefinition> modules = new(1 + module.ModuleReferences.Count);
+        HashSet<ModuleReference> visited = [];
+        modules.Push(module);
+        while (modules.TryPop(out module))
+        {
+            if (!visited.Add(module))
+            {
+                int currentIndex = 0;
+                TypeDefinition? type = null;
+                while ((currentIndex = name[currentIndex..].IndexOf('.')) != -1)
+                {
+                    if ((type = module.GetType(name[currentIndex..].ToString())) is not null)
+                        break;
+                    name = name[currentIndex..];
+                }
+                if (type is not null)
+                {
+                    while ((currentIndex = name[currentIndex..].IndexOf('.')) != -1)
+                    {
+                        string n = name[currentIndex..].ToString();
+                        try
+                        {
+                            return type.Fields.First(fld => fld.Name == n);
+                        }
+                        catch (InvalidOperationException)
+                        {
+                        }
+                        try
+                        {
+                            return type.Methods.First(method => method.Name == n);
+                        }
+                        catch (InvalidOperationException)
+                        {
+                        }
+                        try
+                        {
+                            return type.Properties.First(method => method.Name == n);
+                        }
+                        catch (InvalidOperationException)
+                        {
+                        }
+                        name = name[currentIndex..];
+                    }
+                }
+                foreach (ModuleReference reference in module.ModuleReferences)
+                    modules.Push(module.AssemblyResolver.Resolve(new(reference.Name, version: null)).MainModule);
+            }
+
+        }
+    }
     public static MethodDefinition? GetMethod(
         this TypeDefinition type,
         TypeReference returnType,
