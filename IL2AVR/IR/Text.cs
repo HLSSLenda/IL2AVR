@@ -7,6 +7,6 @@ public readonly record struct Text : IValue
         Type = typeSystem.String;
         Value = value;
     }
-    public ClosedType Type { get; }
+    public IClosedType Type { get; }
     public readonly string Value;
 }

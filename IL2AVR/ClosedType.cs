@@ -35,7 +35,7 @@ public sealed class ClosedType : IEquatable<ClosedType>, IEquatable<TypeReferenc
             GenericArguments = args;
         }
         else
-            GenericArguments = Empty.Dictionary<GenericParameter, ClosedType>();
+            GenericArguments = EmptyDictionary<GenericParameter, ClosedType>.Instance;
         if (UnderlyingType.IsAutoLayout)
             fields = new(UnderlyingType.Fields.Count);
         else if (UnderlyingType.IsExplicitLayout)
@@ -85,7 +85,7 @@ public sealed class ClosedType : IEquatable<ClosedType>, IEquatable<TypeReferenc
         ClosedType? t = this;
         while (t is not null)
         {
-            typeStack.Append(t);
+            typeStack.Push(t);
             t = t.BaseType;
         }
         ushort memorySize = 0;
@@ -149,10 +149,16 @@ public sealed class ClosedType : IEquatable<ClosedType>, IEquatable<TypeReferenc
     public ModuleDefinition Module => UnderlyingType.Module;
     public string Name => UnderlyingType.Name;
 
+    public IClosedType ElementType => throw new NotImplementedException();
+
+    public TypeKind Kind => throw new NotImplementedException();
+
+    TypeReference IClosedType.UnderlyingType => throw new NotImplementedException();
+
     public bool Equals(TypeReference? other) =>
         UnderlyingType.MetadataToken == other?.MetadataToken && UnderlyingType.Module == other.Module &&
         (other is not GenericInstanceType t || t.GenericArguments.Select(static arg => Get(arg)).SequenceEqual(GenericArguments.Values));
-    public bool Equals(ClosedType? other) => UnderlyingType == other?.UnderlyingType && Fields.SequenceEqual(other.Fields);
+    public bool Equals(ClosedType? other) => UnderlyingType.MetadataToken == other?.UnderlyingType.MetadataToken && Fields.SequenceEqual(other.Fields);
 
     public override bool Equals(object? obj) => obj switch
     {
@@ -162,4 +168,6 @@ public sealed class ClosedType : IEquatable<ClosedType>, IEquatable<TypeReferenc
     };
 
     public override int GetHashCode() => HashCode.Combine(UnderlyingType, GenericArguments);
+
+    public override string ToString() => GenericArguments.Count == 0 ? UnderlyingType.FullName : $"{UnderlyingType.FullName}<{string.Join(", ", GenericArguments.Values)}>";
 }

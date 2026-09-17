@@ -30,7 +30,7 @@ public sealed class Tree<T>(T value, ICollection<Tree<T>>? children = null, IEqu
         {
             if (Stack is null)
             {
-                (Stack = new()).Push((K)K.Create(tree));
+                (Stack = new()).Push(K.Create(tree));
                 return true;
             }
             while (true)

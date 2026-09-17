@@ -1,6 +1,7 @@
 using System;
 namespace IL2AVR;
 
+/// <summary>Contains an AVR processor data.</summary>
 public interface IProcessor
 {
     byte DDRB { get; }

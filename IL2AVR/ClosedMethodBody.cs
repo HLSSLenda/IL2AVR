@@ -13,11 +13,11 @@ public sealed class ClosedMethodBody
     public Collection<Instruction> RawInstructions => UnderlyingBody.Instructions;
     public readonly IReadOnlyList<ClosedVariable> Variables;
     public readonly IReadOnlyCollection<ClosedMethodBlock> Blocks;
-    public IEnumerable<IInstruction> Instructions => Blocks.SelectMany(static x => x.Instructions);
+    public IEnumerable<Instruction> Instructions => Blocks.SelectMany(static x => x.Instructions);
 
     internal ClosedMethodBody(CompilerBag bag, ClosedMethod declaringMethod, ClosedTypeSystem typeSystem, bool isInline)
     {
-        static void Conv(List<IInstruction> instructions, Stack<IValue> cilStack, ClosedTypeSystem typeSystem, ClosedType to)
+        static void Conv(List<Instruction> instructions, Stack<IValue> cilStack, ClosedTypeSystem typeSystem, ClosedType to)
         {
             if (!cilStack.TryPop(out IValue? v))
                 throw new WtfException();
@@ -34,7 +34,7 @@ public sealed class ClosedMethodBody
         Dictionary<Instruction, ClosedMethodBlock> blocks = [];
         Stack<IValue> cilStack = [];
         // IR instructions for the current block
-        List<IInstruction> instructions = [];
+        List<Instruction> instructions = [];
         // variable/local references across the entire method
         Dictionary<int, ClosedVariable> vars = [];
 

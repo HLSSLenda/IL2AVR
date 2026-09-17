@@ -20,7 +20,7 @@ public sealed class Compiler
         HashSet<ClosedType> sizeoffed = [];
         Stack<ClosedMethod> pending = new();
         HashSet<ClosedMethod> visitedMethods = [];
-        pending.Push(new(module.EntryPoint, new EmptyDictionary<GenericParameter, ClosedType>()));
+        pending.Push(new(module.EntryPoint, EmptyDictionary<GenericParameter, ClosedType>.Instance));
         while (pending.TryPop(out ClosedMethod? method))
         {
             if (!visitedMethods.Add(method))
@@ -82,7 +82,7 @@ public sealed class Compiler
                 }
             }
         }
-        CompilerBag bag = new(logger, options, module, sizeoffed);
+        CompilerBag bag = new(logger, options, module);
     }
 
     

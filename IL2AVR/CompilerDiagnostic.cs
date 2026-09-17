@@ -5,10 +5,10 @@ public readonly record struct CompilerDiagnostic(CompilerDiagnosticKind Kind, Mo
 {
     public override string ToString() => Id switch
     {
-        CompilerDiagnosticId.ExternEntryPoint => "Entry point doesn't have an IL body.",
-        CompilerDiagnosticId.NoEntryPoint => "Module doesn't have an entry point.",
-        CompilerDiagnosticId.NoImplementation => "Method has no IL body or an intrinsic definition.",
-        CompilerDiagnosticId.UnsupportedProcessorOpCode => $"Target {Context[0]} doesn't support {Context[1]}.",
+        CompilerDiagnosticId.EExternEntryPoint => "Entry point doesn't have an IL body.",
+        CompilerDiagnosticId.ENoEntryPoint => "Module doesn't have an entry point.",
+        CompilerDiagnosticId.ENoImplementation => "Method has no IL body or an intrinsic definition.",
+        CompilerDiagnosticId.EUnsupportedProcessorOpCode => $"Target {Context[0]} doesn't support {Context[1]}.",
         _ => throw new WtfException()
     };
 }

@@ -6,6 +6,7 @@ public abstract record CompileTimeValueDefinition
     internal CompileTimeValueDefinition()
     {
     }
+    public abstract CompileTimeValueType ValueType { get; }
     internal abstract bool Validate(ClosedType type);
 
     public sealed record Boolean(bool Value) : CompileTimeValueDefinition

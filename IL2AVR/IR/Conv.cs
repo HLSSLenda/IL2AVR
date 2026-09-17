@@ -1,9 +1,9 @@
-using System.Collections.Generic;
 namespace IL2AVR.IR;
 
-public sealed class Conv(int id, IValue value, ClosedType to) : IInstruction
+public sealed record Conv(string Label, Instruction? Next, int Position, Instruction? Previous, IValue Value, ClosedType To) : Instruction(InstructionId.Conv, Label, Next, Position, Previous, [Value])
 {
-    public int Id => id;
-    public readonly ClosedType To = to;
-    public IReadOnlyCollection<IValue> Values => [value];
+    public Conv(string label, IValue value, ClosedType to) : this(label, null, -1, null, value, to)
+    {
+    }
+    public override string ToString() => $"({To})({Value})";
 }

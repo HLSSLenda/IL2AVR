@@ -33,8 +33,8 @@ switch (args[1].ToLowerInvariant())
 
 IEmitter? compiler = null;
 bool inline = true;
-IReadOnlyDictionary<string, CompileTimeValueDefinition> definitions = [];
-ReadOnlySpan<string> remainingArgs = new ReadOnlySpan<string>(args, 2, args.Length - 2);
+Dictionary<string, CompileTimeValueDefinition> definitions = [];
+ReadOnlySpan<string> remainingArgs = new(args, 2, args.Length - 2);
 for (int i = 0; i < remainingArgs.Length; ++i)
 {
     switch (args[i])
@@ -64,9 +64,3 @@ for (int i = 0; i < remainingArgs.Length; ++i)
 
 ICollection<CompiledMethod> methods = compiler.Compile(new(Inline: inline));
 return 0;
-
-internal enum CompileTimeValueType
-{
-    Bool,
-
-}

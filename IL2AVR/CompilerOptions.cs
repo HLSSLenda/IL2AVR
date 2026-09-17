@@ -26,6 +26,7 @@ namespace IL2AVR;
 public record CompilerOptions(
     BreakBehavior BreakBehavior = BreakBehavior.Break,
     IReadOnlyDictionary<string, CompileTimeValueDefinition>? CompileTimeValueDefinitions = null,
+    CompilerDiagnosticKind Diagnostics = CompilerDiagnosticKind.Fatal | CompilerDiagnosticKind.Error | CompilerDiagnosticKind.Warning,
     bool EnableDefaultIntrinsics = true,
     bool IgnoreNops = false,
     InlineMode InlineMode = InlineMode.AgressiveInlining,

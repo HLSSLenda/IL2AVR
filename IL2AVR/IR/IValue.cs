@@ -2,5 +2,5 @@ namespace IL2AVR.IR;
 
 public interface IValue
 {
-    ClosedType Type { get; }
+    IClosedType Type { get; }
 }

@@ -1,4 +1,4 @@
-namespace IL2AVR;
+namespace IL2AVR.IR;
 
 public enum BreakBehavior
 {

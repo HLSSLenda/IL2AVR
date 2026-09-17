@@ -5,5 +5,5 @@ namespace IL2AVR;
 public sealed class ClosedParameter(ParameterReference parameter, IReadOnlyDictionary<GenericParameter, ClosedType> declaringObjectsGenericArguments)
 {
     public readonly ParameterDefinition UnderlyingParameter = parameter.Resolve();
-    public readonly ClosedType ParameterType = parameter.ParameterType.Close(declaringObjectsGenericArguments);
+    public readonly IClosedType ParameterType = parameter.ParameterType.Close(declaringObjectsGenericArguments);
 }

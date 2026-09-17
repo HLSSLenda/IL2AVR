@@ -7,12 +7,12 @@ public sealed class TextWriterLogger(TextWriter writer, bool warningAsError = fa
 {
     private void Write(ReadOnlySpan<char> prefix, ReadOnlySpan<char> fmt, ReadOnlySpan<object> args)
     {
-	if (!prefix.IsEmpty)
-	{
+        if (!prefix.IsEmpty)
+        {
             writer.Write(prefix);
             writer.Write(' ');
-	}
-	writer.WriteLine(fmt.ToString(), args);
+        }
+        writer.WriteLine(fmt.ToString(), args);
     }
     public void Debug(ReadOnlySpan<char> fmt, params scoped ReadOnlySpan<object> args) => Write("(DEBUG)", fmt, args);
 

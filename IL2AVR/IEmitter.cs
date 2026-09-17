@@ -4,5 +4,5 @@ namespace IL2AVR;
 
 public interface IEmitter
 {
-    bool Emit(ICollection<CompiledMethod> methods, Stream stream);
+    bool Emit(IReadOnlyList<CompiledMethod> methods, Stream stream);
 }

@@ -1,24 +1,24 @@
 namespace IL2AVR.IR;
 
-public record Number(ClosedType Type, ulong Value) : IValue
+public record Number(IClosedType Type, ulong Value) : IValue
 {
-    public Number To(ClosedTypeSystem typeSystem, ClosedType numberType)
+    public Number To(ClosedTypeSystem typeSystem, IClosedType numberType)
     {
-        if (numberType == typeSystem.SByte)
+        if (numberType.Equals(typeSystem.SByte))
             return new(numberType, (ulong)(sbyte)Value);
-        if (numberType == typeSystem.Byte || numberType == typeSystem.Char)
+        if (numberType.Equals(typeSystem.Byte) || numberType.Equals(typeSystem.Char))
             return new(numberType, (ulong)Value);
-        if (numberType == typeSystem.Int16)
+        if (numberType.Equals(typeSystem.Int16))
             return new(numberType, (ulong)(short)Value);
-        if (numberType == typeSystem.UInt16)
+        if (numberType.Equals(typeSystem.UInt16))
             return new(numberType, (ulong)(ushort)Value);
-        if (numberType == typeSystem.Int32)
+        if (numberType.Equals(typeSystem.Int32))
             return new(numberType, (ulong)(int)Value);
-        if (numberType == typeSystem.UInt32)
+        if (numberType.Equals(typeSystem.UInt32))
             return new(numberType, (ulong)(uint)Value);
-        if (numberType == typeSystem.Int64)
+        if (numberType.Equals(typeSystem.Int64))
             return new(numberType, (ulong)(long)Value);
-        if (numberType == typeSystem.UInt64)
+        if (numberType.Equals(typeSystem.UInt64))
             return new(numberType, Value);
         throw new WtfException();
     }

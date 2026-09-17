@@ -6,7 +6,7 @@ namespace IL2AVR;
 
 public sealed class EmptyDictionary<TKey, TValue> : IReadOnlyDictionary<TKey, TValue> where TKey : notnull
 {
-    public static EmptyDictionary<TKey, TValue> Instance = new();
+    public static readonly EmptyDictionary<TKey, TValue> Instance = new();
     private EmptyDictionary()
     {
     }

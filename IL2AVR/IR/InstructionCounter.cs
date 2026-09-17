@@ -3,11 +3,11 @@ namespace IL2AVR.IR;
 
 internal sealed class InstructionCounter
 {
-    private readonly List<Boxed<int>> _instructions = [];
+    private readonly List<Wrap<int>> _instructions = [];
 
-    public Boxed<int> GetInstruction(int at = -1)
+    public Wrap<int> GetInstruction(int at = -1)
     {
-        Boxed<int> v;
+        Wrap<int> v;
         if (at < 0 || at >= _instructions.Count)
             _instructions.Add(v = new(_instructions.Count));
         else

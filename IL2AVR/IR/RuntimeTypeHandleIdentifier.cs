@@ -7,7 +7,7 @@ public sealed class RuntimeTypeHandleIdentifier : IValue
     public readonly ushort Id;
     public readonly ClosedType HandleType;
     private readonly ClosedType _type;
-    ClosedType IValue.Type => _type;
+    IClosedType IValue.Type => _type;
 
     private RuntimeTypeHandleIdentifier(ClosedTypeSystem typeSystem, ushort id, ClosedType type)
     {

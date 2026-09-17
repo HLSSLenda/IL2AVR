@@ -32,7 +32,7 @@ public ref struct CompilerBag
 
     public CompilerBag(ILogger logger, CompilerOptions options, ModuleDefinition mainModule)
     {
-        Diagnostics = new(options.WarningAsError);
+        Diagnostics = new(warnAsError: options.WarningAsError);
         Logger = logger;
         Options = options;
 
@@ -52,7 +52,7 @@ public ref struct CompilerBag
         Alloc = (mainModule.GetType("System.Runtime.InteropServices.NativeMemory") ?? corelib.GetType("System.Runtime.InteropServices.NativeMemory"))
             .GetMethod(new PointerType(ts.Void.UnderlyingType), "Alloc", 0, ts.UIntPtr.UnderlyingType)!;
         AllocateArray = corelib.GetType("System.GC").Methods.First(method => method.Name == "AllocateArray" && method.GenericParameters.Count == 1 && method.Parameters.Count == 1 && method.Parameters[0].ParameterType == ts.Int32.UnderlyingType);
-        Finalize = ts.Object.UnderlyingType.GetMethod(ts.Void.UnderlyingType, "Finalize")!;
+        Finalize = ts.Object.UnderlyingType.GetMethod(ts.Object.UnderlyingType, "Finalize")!;
 
         TypeDefinition opcodeIdType = corelib.GetType("System.Runtime.CompilerServices.IL2AVR.OpCodeId");
         TypeDefinition unsafeType = corelib.GetType("System.Runtime.CompilerServices.Unsafe");
