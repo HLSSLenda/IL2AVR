@@ -1,7 +1,7 @@
 using Mono.Cecil;
 namespace IL2AVR;
 
-public readonly record struct CompilerDiagnostic(CompilerDiagnosticKind Kind, ModuleDefinition Module, ClosedType? Type, ClosedMethod? Method, CompilerDiagnosticId Id, params object[] Context)
+public readonly record struct CompilerDiagnostic(CompilerDiagnosticKind Kind, ModuleDefinition Module, IClosedEntity Entity, CompilerDiagnosticId Id, params object[] Context)
 {
     public override string ToString() => Id switch
     {

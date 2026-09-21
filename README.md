@@ -59,6 +59,30 @@ where:
 - `panic`: Call a global panic method registered in the event <<<TODO>>> and halt the program.
 - `ignore`: With great powers come great resposibilities!
 
+# Example usage
+Follow this C# code:
+```cs
+// QUESTION: Is porting System.Device.Gpio actually beneficial?
+// This Arduino library doesn't allocate memory... And it works thanks to extension methods.
+using Arduino;
+using System;
+using System.Threading;
+
+Pin.D2.Output(); // Pin.Output(Pin.D2)
+bool led = false;
+while (true)
+{
+    Pin.D2.Write(led); // Pin.Write(Pin.D2)
+    led = !led;
+    Thread.Sleep(1000);
+}
+```
+First, you have to compile this code without .NET's default BCL, instead replacing it by the BCL inside 'System' folder.
+After that, you can invoke the compiler on the DLL file!
+`$ IL2AVR atmega328p Module.dll`
+`$ `
+After that, `avrdude` can be used to flash it.
+
 # Internals
 IL2AVR is a very complex project, ranging to 3 parts:
 - Compiler: The compiler itself, which it's subdivided into a lot of parts.
@@ -428,7 +452,9 @@ This project includes a basic library for Arduino programmers, with support for 
 
 ## Compiler library
 The compiler can be called as a library. Every CLI argument can be mapped into the following:
+
 `--define` => `IL2AVR.CompilerOptions.Definitions`: a `IDictionary<string, IL2AVR.CompileTimeValueDefinition>` that maps names to values defined at compile-time.
+
 `--no-exceptions`: `IL2AVR.CompilerOptions.NoExceptions`
 
 ## `Mono.Cecil` limitations and the `IClosedType` interface
@@ -665,8 +691,8 @@ Thanks to the pitfall above, `sizeof()` is the most unsafe thing on the language
 |   | `0xFE 0x14` | `tail.` |
 |   | `0xFE 0x15` | `initobj` |
 |   | `0xFE 0x16` | `constrained.` |
-|   | `0xFE 0x17` | `cpblk` |
-|   | `0xFE 0x18` | `initblk` |
+| # | `0xFE 0x17` | `cpblk` |
+| # | `0xFE 0x18` | `initblk` |
 |   | `0xFE 0x19` | `no.` |
 |   | `0xFE 0x1A` | `rethrow` |
 | O | `0xFE 0x1C` | `sizeof` |

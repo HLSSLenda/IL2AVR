@@ -9,13 +9,6 @@ public static class Console
     public static TextWriter? Error = null;
 #pragma warning restore CA2211
     public static string? ReadLine(Span<byte> buffer) => In?.ReadLine(buffer);
-    public static void Write(ReadOnlySpan<byte> text) => Out?.Write(text);
-    public static void WriteLine(ReadOnlySpan<byte> text)
-    {
-        if (Out is not null)
-        {
-            Out.Write(text);
-            Out.Write('\n');
-        }
-    }
+    public static void Write(ReadOnlySpan<char> text) => Out?.Write(text);
+    public static void WriteLine(ReadOnlySpan<char> text) => Out?.WriteLine(text);
 }

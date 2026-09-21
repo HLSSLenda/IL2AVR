@@ -10,36 +10,22 @@ namespace IL2AVR;
 public sealed class ClosedMethodBody
 {
     public readonly MethodBody UnderlyingBody;
-    public Collection<Instruction> RawInstructions => UnderlyingBody.Instructions;
     public readonly IReadOnlyList<ClosedVariable> Variables;
-    public readonly IReadOnlyCollection<ClosedMethodBlock> Blocks;
-    public IEnumerable<Instruction> Instructions => Blocks.SelectMany(static x => x.Instructions);
+    public readonly IReadOnlyList<ClosedMethodBasicBlock> Blocks;
+    public IntermediateInstruction EntryInstruction => Blocks[0].Instructions[0];
+    public IEnumerable<IntermediateInstruction> Instructions => Blocks.SelectMany(static x => x.Instructions);
+    public readonly bool IsCompileTimeEvaluable;
 
     internal ClosedMethodBody(CompilerBag bag, ClosedMethod declaringMethod, ClosedTypeSystem typeSystem, bool isInline)
     {
-        static void Conv(List<Instruction> instructions, Stack<IValue> cilStack, ClosedTypeSystem typeSystem, ClosedType to)
-        {
-            if (!cilStack.TryPop(out IValue? v))
-                throw new WtfException();
-            if (v is Number n)
-                cilStack.Push(n.To(typeSystem, to));
-            else
-                instructions.Add(new Conv(instructions.Count, v, to));
-        }
         UnderlyingBody = declaringMethod.RawBody;
         Variables = [.. declaringMethod.RawBody.Variables.Select(variable => new ClosedVariable(variable, declaringMethod.GenericArguments))];
 
         Instruction currentLeader = declaringMethod.RawBody.Instructions[0];
-        // block mapping from each CIL instruction
-        Dictionary<Instruction, ClosedMethodBlock> blocks = [];
         Stack<IValue> cilStack = [];
-        // IR instructions for the current block
-        List<Instruction> instructions = [];
         // variable/local references across the entire method
         Dictionary<int, ClosedVariable> vars = [];
-
-        
-
+        InstructionStream instructions = new();
         NumberSystem intNumbers = new(typeSystem.Int32);
         NumberSystem longNumbers = new(typeSystem.Int64);
         TextSystem texts = new(typeSystem);
@@ -49,10 +35,10 @@ public sealed class ClosedMethodBody
             switch (instruction.OpCode.Code)
             {
                 case Code.Nop:
-                    instructions.Add(new Nop());
+                    instructions.Add(new(InstructionId.Nop));
                     break;
                 case Code.Break:
-                    instructions.Add(new Break());
+                    instructions.Add(new(InstructionId.Break));
                     break;
                 case Code.Ldarg_0:
                     cilStack.Push(new Arg(declaringMethod.Parameters[0]));
@@ -96,7 +82,7 @@ public sealed class ClosedMethodBody
                 case Code.Stloc_S:
                     break;
                 case Code.Ldnull:
-                    cilStack.Append(new Null());
+                    cilStack.Push(new Null(typeSystem.Object));
                     break;
                 case Code.Ldc_I4_M1:
                     cilStack.Push(intNumbers[unchecked((ulong)-1)]);
@@ -165,8 +151,8 @@ public sealed class ClosedMethodBody
                     // ...
                     break;
                 case Code.Ret:
-                    if (declaringMethod.ReturnType == bag.TypeSystem.Void)
-                        instructions.Add(new Ret(null));
+                    instructions.Add(new(InstructionId.Ret,
+                        Values: declaringMethod.ReturnType.Kind == ClosedTypeKind.Void ? [] : [cilStack.Pop()]));
                     break;
                 case Code.Br_S:
                     break;
@@ -378,6 +364,10 @@ public sealed class ClosedMethodBody
                 case Code.Box:
                     break;
                 case Code.Newarr:
+                    instructions.Add(new CallInstruction(bag.AllocateArray.Close(new Dictionary<GenericParameter, IClosedType>(1)
+                    {
+                        { bag.AllocateArray.GenericParameters[0], ((TypeReference)instruction.Operand).Close() }
+                    }), Values: [cilStack.Pop()]));
                     break;
                 case Code.Ldlen:
                     break;

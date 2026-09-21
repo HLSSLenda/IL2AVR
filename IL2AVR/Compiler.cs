@@ -85,5 +85,68 @@ public sealed class Compiler
         CompilerBag bag = new(logger, options, module);
     }
 
-    
+    public Compiler Define(string name, byte value)
+    {
+        return this;
+    }
+    public Compiler Define(string name, sbyte value)
+    {
+        return this;
+    }
+    public Compiler Define(string name, short value)
+    {
+        return this;
+    }
+    public Compiler Define(string name, ushort value)
+    {
+        return this;
+    }
+    public Compiler Define(string name, int value)
+    {
+        return this;
+    }
+    public Compiler Define(string name, uint value)
+    {
+        return this;
+    }
+    public Compiler Define(string name, long value)
+    {
+        return this;
+    }
+    public Compiler Define(string name, ulong value)
+    {
+        return this;
+    }
+    public Compiler Define(string name, float value)
+    {
+        return this;
+    }
+    public Compiler Define(string name, double value)
+    {
+        return this;
+    }
+    public Compiler Define(string name, char value)
+    {
+        return this;
+    }
+    public Compiler Define(string name, string value)
+    {
+        return this;
+    }
+    public Compiler Define(string name, ClosedType value)
+    {
+        return this;
+    }
+    public Compiler DefineMethod(string name, ClosedMethod value)
+    {
+        return this;
+    }
+    public Compiler DefineConstructor(string name, ClosedMethod value)
+    {
+        return this;
+    }
+    public bool Emit<T>() where T : IEmitter, new()
+    {
+
+    }
 }

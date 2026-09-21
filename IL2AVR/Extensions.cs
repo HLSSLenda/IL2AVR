@@ -1,3 +1,4 @@
+using IL2AVR.IR;
 using Mono.Cecil;
 using System;
 using System.Collections.Generic;
@@ -8,25 +9,25 @@ namespace IL2AVR;
 public static class Extensions
 {
     /// Closes an arbitrary <see cref="TypeReference" />. 
-    public static IClosedType Close(this TypeReference self, IReadOnlyDictionary<GenericParameter, ClosedType>? genericArguments = null)
+    public static IClosedType Close(this TypeReference self, IReadOnlyDictionary<GenericParameter, IClosedType>? genericArguments = null)
     {
-        genericArguments ??= EmptyDictionary<GenericParameter, ClosedType>.Instance;
-        Stack<TypeKind> kinds = new();
+        genericArguments ??= EmptyDictionary<GenericParameter, IClosedType>.Instance;
+        Stack<ClosedTypeKind> kinds = new();
         while (true)
         {
             if (self is ArrayType t1)
             {
-                kinds.Push(TypeKind.Array);
+                kinds.Push(ClosedTypeKind.Array);
                 self = t1.ElementType;
             }
             else if (self is ByReferenceType t2)
             {
-                kinds.Push(TypeKind.ByReference);
+                kinds.Push(ClosedTypeKind.ByReference);
                 self = t2.ElementType;
             }
             else if (self is PointerType t3)
             {
-                kinds.Push(TypeKind.Pointer);
+                kinds.Push(ClosedTypeKind.Pointer);
                 self = t3.ElementType;
             }
             else
@@ -39,7 +40,8 @@ public static class Extensions
             {
                 if (arg is GenericParameter parameter)
                 {
-                    if (!genericArguments.TryGetValue(parameter, out ClosedType? t))
+                    if (!genericArguments.TryGetValue(parameter, out IClosedType? t) ||
+                            (!IsAggregateKind(t.Kind) && t.Kind != ClosedTypeKind.Array))
                         throw new WtfException();
                     newType.GenericArguments.Add(t.UnderlyingType);
                 }
@@ -52,24 +54,25 @@ public static class Extensions
             TypeDefinition typeDef = self.Resolve();
             foreach (GenericParameter parameter in typeDef.GenericParameters)
             {
-                if (!genericArguments.TryGetValue(parameter, out ClosedType? t))
+                if (!genericArguments.TryGetValue(parameter, out IClosedType? t) ||
+                        (!IsAggregateKind(t.Kind) && t.Kind != ClosedTypeKind.Array))
                     throw new WtfException();
                 newType.GenericArguments.Add(t.UnderlyingType);
             }
         }
 
         IClosedType finalType = ClosedType.Get(newType);
-        while (kinds.TryPop(out TypeKind kind))
+        while (kinds.TryPop(out ClosedTypeKind kind))
         {
             switch (kind)
             {
-                case TypeKind.Array:
+                case ClosedTypeKind.Array:
                     finalType = new ClosedArrayType(finalType);
                     break;
-                case TypeKind.ByReference:
+                case ClosedTypeKind.ByReference:
                     finalType = new ClosedByReferenceType(finalType);
                     break;
-                case TypeKind.Pointer:
+                case ClosedTypeKind.Pointer:
                     finalType = new ClosedPointerType(finalType);
                     break;
             }
@@ -77,7 +80,56 @@ public static class Extensions
 
         return finalType;
     }
-    public static ClosedMethod Close(this MethodReference method, IReadOnlyDictionary<GenericParameter, ClosedType>? genericArguments = null) => ClosedMethod.Get(method, genericArguments);
+    /// <summary>Checks if a closed type can be converted to another.</summary>
+    /// <param name="src">The source type.</param>
+    /// <param name="dst">The destination type.</param>
+    /// <param name="typeSystem">The core type system.</param>
+    /// <returns><see langword="true" /> if <paramref name="src" /> can be converted to <paramref name="dst"/>.</returns>
+    /// <remarks>
+    /// A type can be converted to another if:
+    /// (TODO)
+    /// </remarks>
+    public static bool CanConvertTo(this IClosedType src, IClosedType dst)
+    {
+        if (src == dst || src.Equals(dst) ||
+                ((src.Kind == ClosedTypeKind.ByReference || src.Kind == ClosedTypeKind.Pointer) &&
+                 (dst.Kind == ClosedTypeKind.ByReference || dst.Kind == ClosedTypeKind.Pointer)) ||
+                 (src.Kind == ClosedTypeKind.Sentinel && dst.Kind == ClosedTypeKind.Sentinel))
+            return true;
+        ClosedType srcRoot = GetRootElementType(src);
+        ClosedType dstRoot = GetRootElementType(dst);
+        if (IsNumberKind(srcRoot.Kind))
+            return IsNumberKind(dstRoot.Kind) && srcRoot.Size <= dstRoot.Size;
+        ClosedType? currentBase = srcRoot;
+        while ((currentBase = currentBase!.BaseType) is not null)
+            if (currentBase == dstRoot)
+                return true;
+        return false;
+    }
+    public static ClosedMethod Close(this MethodReference method, IReadOnlyDictionary<GenericParameter, IClosedType>? genericArguments = null) => ClosedMethod.Get(method, genericArguments);
+    public static ICompileTimeValue DefaultCompileTimeValue(this IClosedType type)
+    {
+        if (type.Kind == ClosedTypeKind.Sentinel)
+            throw new InvalidOperationException("Cannot get the default value of a sentinel.");
+        if (type.Kind == ClosedTypeKind.Void)
+            throw new InvalidOperationException("Cannot get the default value of void.");
+        if (IsReferenceKind(type.Kind))
+            return new Null(type);
+        if (IsNumberKind(type.Kind))
+            return new Number(type, 0);
+        return new CompileTimeClosedTypeInstance((ClosedType)type);
+    }
+    public static bool Extends(this ClosedType child, ClosedType father)
+    {
+        ClosedType? current = child;
+        while (current is not null)
+        {
+            if (current == father)
+                return true;
+            current = current.BaseType;
+        }
+        return false;
+    }
     public static TValue? GetOrAdd<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, TValue defaultValue) =>
         dictionary.TryGetValue(key, out TValue? value) ? value : dictionary[key] = defaultValue;
     public static TypeReference? GetSigned(this TypeReference? type, TypeSystem typeSystem)
@@ -94,7 +146,11 @@ public static class Extensions
             return typeSystem.IntPtr;
         return type;
     }
-    public static MemberReference? GetMember(ModuleDefinition module, ReadOnlySpan<char> name)
+    /// <summary>Gets a member (field, method or property) by a name string from a module and its references.</summary>
+    /// <param name="module">The module definition to search.</param>
+    /// <param name="name">The name to search.</param>
+    /// <returns>A valid <see cref="MemberReference" /> from the name, or <see langword="null" /> if not found.</param>
+    public static MemberReference? GetMemberByName(this ModuleDefinition module, ReadOnlySpan<char> name)
     {
         Stack<ModuleDefinition> modules = new(1 + module.ModuleReferences.Count);
         HashSet<ModuleReference> visited = [];
@@ -159,7 +215,7 @@ public static class Extensions
         method.Parameters.Select(static param => param.ParameterType).SequenceEqual(parameters));
     public static ClosedType GetRootElementType(this IClosedType type)
     {
-        while (type is not ClosedType)
+        while (type is not ClosedType || type.ElementType is not null)
             type = type.ElementType;
         return (ClosedType)type;
     }
@@ -182,11 +238,23 @@ public static class Extensions
     /// <param name="n">The ushort to get the high byte.</param>
     /// <returns>The high byte of <paramref name="n" />.</returns>
     public static byte High(this ushort n) => (byte)(n >> 8);
+
+    // see TypeKind.cs
+    public static bool IsAggregateKind(this ClosedTypeKind kind) => kind == ClosedTypeKind.AggregateReference || kind == ClosedTypeKind.AggregateValue;
+    public static bool IsBasicKind(this ClosedTypeKind kind) => kind >= ClosedTypeKind.TypedReference;
+    public static bool IsReferenceKind(this ClosedTypeKind kind) =>
+        kind == ClosedTypeKind.AggregateReference || (kind >= ClosedTypeKind.Array && kind <= ClosedTypeKind.Pointer) ||
+        kind >= ClosedTypeKind.Object;
+    public static bool IsFloatingPointKind(this ClosedTypeKind kind) => kind == ClosedTypeKind.Double || kind == ClosedTypeKind.Single;
+    public static bool IsIntegerKind(this ClosedTypeKind kind) => kind >= ClosedTypeKind.Int16 && kind <= ClosedTypeKind.UIntPtr;
+    public static bool IsNumberKind(this ClosedTypeKind kind) => kind >= ClosedTypeKind.Int16 && kind <= ClosedTypeKind.Single;
+    public static bool IsSignedKind(this ClosedTypeKind kind) => (kind >= ClosedTypeKind.Int16 && kind <= ClosedTypeKind.SByte) || IsFloatingPointKind(kind);
+    public static bool IsUnsignedKind(this ClosedTypeKind kind) => kind >= ClosedTypeKind.Int16 && kind <= ClosedTypeKind.SByte;
+
     /// <summary>Gets the low byte of this ushort (n &amp; 0xff).</summary>
     /// <param name="n">The ushort to get the low byte.</param>
     /// <returns>The low byte of <paramref name="n" />.</returns>
     public static byte Low(this ushort n) => (byte)(n & 0xff);
-    private static Dictionary<MemberReference, IReadOnlyList<ClosedType>>? instantiator = null;
 
     /*public static ClosedType InstantiateGeneric(this TypeReference self, IReadOnlyList<ClosedType>? genericArguments)
     {
@@ -218,6 +286,7 @@ public static class Extensions
             foreach (CompilerDiagnostic diagnostic in diagnostics.Fatals)
                 logger.Fatal("(FATAL) {0}", diagnostic);
     }
+    public static IClosedType Max(IClosedType a, IClosedType b) => a.Size >= b.Size ? a : b;
     public static bool IsImmutable(this TypeDefinition type, TypeSystem typeSystem) =>
         type == typeSystem.Boolean || type == typeSystem.Byte || type == typeSystem.Char || type == typeSystem.Double || type == typeSystem.Int16 ||
         type == typeSystem.Int32 || type == typeSystem.Int64 || type == typeSystem.IntPtr || type == typeSystem.SByte || type == typeSystem.Single ||

@@ -18,6 +18,7 @@ public ref struct CompilerBag
     public readonly TypeDefinition AllocateFromAttribute;
     public readonly TypeDefinition ConstantExpectedAttribute;
     public readonly TypeDefinition DoesNotReturnAttribute;
+    public readonly TypeDefinition Exception;
     public readonly TypeDefinition InlineArrayAttribute;
     public readonly TypeDefinition InterruptAttribute;
     public readonly TypeDefinition NakedAttribute;
@@ -42,6 +43,7 @@ public ref struct CompilerBag
         AllocateFromAttribute = corelib.GetType("System.Runtime.CompilerServices.IL2AVR.AllocateFromAttribute");
         ConstantExpectedAttribute = corelib.GetType("System.Diagnostics.CodeAnalysis.ConstantExpectedAttribute");
         DoesNotReturnAttribute = corelib.GetType("System.Diagnostics.CodeAnalysis.DoesNotReturnAttribute");
+        Exception = corelib.GetType("System.Exception");
         InlineArrayAttribute = corelib.GetType("System.Runtime.CompilerServices.InlineArrayAttribute");
         InterruptAttribute = corelib.GetType("System.Runtime.InterruptAttribute");
         NakedAttribute = corelib.GetType("System.Runtime.CompilerServices.IL2AVR.NakedAttribute");
@@ -61,30 +63,28 @@ public ref struct CompilerBag
         {
             {
                 assemblyType.GetMethod(ts.Void.UnderlyingType, "Asm", 0, opcodeIdType)!,
-                (in compilerBag, isInline, callGraph, instructionStream, args) =>
+                (in compilerBag, isInline, _, instructionStream, args) =>
                 {
                     if (!isInline)
                         compilerBag.Diagnostics.Error();
-                    instructionStream.Add(new Asm(0, new((OpCodeId)((Number)args[0]).Value)));
+                    instructionStream.Add(new(InstructionId.Asm, Values: [new OpCode((OpCodeId)((Number)args[0]).Value)]));
                 }
             },
 
             {
                 unsafeType.Methods.First(static method => method.Name == "As" && method.GenericParameters.Count == 2 && method.Parameters.Count == 1 && method.Parameters[0].ParameterType.IsByReference),
-                (callStack, args) => []
+                (in _, _, _, _, _) => {}
             },
 
             {
                 unsafeType.Methods.First(static method => method.Name == "AsRef" && method.GenericParameters.Count == 1 && method.Parameters.Count == 1 && method.Parameters[0].ParameterType.IsPointer),
-                (callStack, args) => []
+                (in _, _, _, _, _) => {}
             },
 
             {
                 unsafeType.GetMethod(ts.Int32.UnderlyingType, "SizeOf", 1)!,
-                (callStack, args) =>
-                [
-                    new Ret(new Number(ts.UInt16, callStack[^1].GenericArguments.Values.First().Size))
-                ]
+                (in _, isInline, callStack, instructionStream, args) =>
+                    instructionStream.Add(new(InstructionId.Ret, Values: [new Number(ts.UInt16, callStack[^1].GenericArguments.Values.First().Size)]))
             }
         };
 

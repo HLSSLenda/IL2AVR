@@ -13,15 +13,17 @@ public sealed class ClosedType : IEquatable<ClosedType>, IEquatable<TypeReferenc
     private ushort addFieldOffset = 0;
     private readonly List<ClosedField> fields;
     public IReadOnlyCollection<ClosedField> Fields => fields;
-    public readonly IReadOnlyDictionary<GenericParameter, ClosedType> GenericArguments;
+    public readonly IReadOnlyDictionary<GenericParameter, IClosedType> GenericArguments;
     public readonly ushort InlineArraySize;
     public readonly bool IsBasic;
     public bool IsImmutable { get; internal set; } = true;
+    public string Name => UnderlyingType.Name;
     public ushort MemorySize { get; private set; }
     public ushort Size { get; private set; }
     public readonly TypeDefinition UnderlyingType;
+    public MemberReference MemberReference => UnderlyingType;
 
-    internal ClosedType(TypeReference type, ushort? size = null)
+    internal ClosedType(TypeReference type, ushort size = 0, ClosedTypeKind kind = ClosedTypeKind.AggregateReference)
     {
         if (type.HasGenericParameters)
             throw new WtfException($"A ClosedType cannot instantiate an open type! {type}");
@@ -29,21 +31,22 @@ public sealed class ClosedType : IEquatable<ClosedType>, IEquatable<TypeReferenc
         UnderlyingType = type.Resolve();
         if (type is GenericInstanceType t)
         {
-            Dictionary<GenericParameter, ClosedType> args = new Dictionary<GenericParameter, ClosedType>(UnderlyingType.GenericParameters.Count, new GenericParameterEqualityComparer());
+            Dictionary<GenericParameter, IClosedType> args = new(UnderlyingType.GenericParameters.Count, new GenericParameterEqualityComparer());
             for (int i = 0; i < UnderlyingType.GenericParameters.Count; ++i)
-                args[UnderlyingType.GenericParameters[i]] = Get(t.GenericArguments[i]);
+                args[UnderlyingType.GenericParameters[i]] = t.GenericArguments[i].Close();
             GenericArguments = args;
         }
         else
-            GenericArguments = EmptyDictionary<GenericParameter, ClosedType>.Instance;
+            GenericArguments = EmptyDictionary<GenericParameter, IClosedType>.Instance;
+
+        if (size >= 0)
+            MemorySize = (ushort)size;
         if (UnderlyingType.IsAutoLayout)
             fields = new(UnderlyingType.Fields.Count);
         else if (UnderlyingType.IsExplicitLayout)
         {
             fields = [..UnderlyingType.Fields.Select(field => new ClosedField(field, GenericArguments))];
-            if (size is ushort sz)
-                MemorySize = sz;
-            else
+            if (size == 0 && fields.Count > 0)
             {
                 IEnumerable<ClosedField> sorted = fields.OrderByDescending(static fld => fld.Offset);
                 ushort largestOffset = fields.First().Offset;
@@ -62,6 +65,7 @@ public sealed class ClosedType : IEquatable<ClosedType>, IEquatable<TypeReferenc
             foreach (FieldReference fld in UnderlyingType.Fields)
                 AddFieldInternal(fld);
         }
+        Kind = kind;
         Size = UnderlyingType.IsReference() ? (ushort)2 : MemorySize;
         cachedTypes[type] = this;
     }
@@ -144,16 +148,13 @@ public sealed class ClosedType : IEquatable<ClosedType>, IEquatable<TypeReferenc
     public string FullName => UnderlyingType.FullName;
     public bool IsInterface => UnderlyingType.IsInterface;
     public bool IsExplicitLayout => UnderlyingType.IsExplicitLayout;
-    public bool IsPrimitive => UnderlyingType.IsPrimitive;
-    public bool IsValueType => UnderlyingType.IsValueType;
     public ModuleDefinition Module => UnderlyingType.Module;
-    public string Name => UnderlyingType.Name;
 
-    public IClosedType ElementType => throw new NotImplementedException();
+    public IClosedType ElementType => this;
 
-    public TypeKind Kind => throw new NotImplementedException();
+    public ClosedTypeKind Kind { get; }
 
-    TypeReference IClosedType.UnderlyingType => throw new NotImplementedException();
+    TypeReference IClosedType.UnderlyingType => UnderlyingType;
 
     public bool Equals(TypeReference? other) =>
         UnderlyingType.MetadataToken == other?.MetadataToken && UnderlyingType.Module == other.Module &&
@@ -167,7 +168,7 @@ public sealed class ClosedType : IEquatable<ClosedType>, IEquatable<TypeReferenc
         _ => false
     };
 
-    public override int GetHashCode() => HashCode.Combine(UnderlyingType, GenericArguments);
+    public override int GetHashCode() => HashCode.Combine(UnderlyingType.MetadataToken, GenericArguments);
 
     public override string ToString() => GenericArguments.Count == 0 ? UnderlyingType.FullName : $"{UnderlyingType.FullName}<{string.Join(", ", GenericArguments.Values)}>";
 }

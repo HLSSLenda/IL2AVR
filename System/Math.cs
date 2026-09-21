@@ -18,13 +18,20 @@ public static class Math
         {
             int rx = Unsafe.As<double, int>(ref x);
             int ry = Unsafe.As<double, int>(ref y);
-
         }
         private static float Sub(float x, float y)
         {
+            short rx = Unsafe.As<float, short>(ref x);
+            short ry = Unsafe.As<float, short>(ref y);
+            if (rx == ry)
+                return 0;
         }
         private static double Sub(double x, double y)
         {
+            int rx = Unsafe.As<double, int>(ref x);
+            int ry = Unsafe.As<double, int>(ref y);
+            if (rx == ry)
+                return 0;
         }
         private static float Mul(float x, float y)
         {

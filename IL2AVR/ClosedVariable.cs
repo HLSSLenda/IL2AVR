@@ -3,8 +3,8 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 namespace IL2AVR;
 
-public sealed class ClosedVariable(VariableReference variable, IReadOnlyDictionary<GenericParameter, ClosedType> generics)
+public sealed class ClosedVariable(VariableReference variable, IReadOnlyDictionary<GenericParameter, IClosedType> generics)
 {
     public readonly VariableReference UnderlyingVariable = variable;
-    public readonly ClosedType VariableType = variable.VariableType.InstantiateGeneric(generics);
+    public readonly IClosedType VariableType = variable.VariableType.Close(generics);
 }

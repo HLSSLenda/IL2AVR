@@ -1,3 +1,4 @@
+using System.Runtime.IL2AVR;
 namespace System;
 
 public interface IParsable<T> where T : IParsable<T>, allows ref struct

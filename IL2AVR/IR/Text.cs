@@ -1,6 +1,6 @@
 namespace IL2AVR.IR;
 
-public readonly record struct Text : IValue
+public readonly record struct Text : ICompileTimeValue
 {
     public Text(ClosedTypeSystem typeSystem, string value)
     {
@@ -9,4 +9,5 @@ public readonly record struct Text : IValue
     }
     public IClosedType Type { get; }
     public readonly string Value;
+    object ICompileTimeValue.Value => Value;
 }

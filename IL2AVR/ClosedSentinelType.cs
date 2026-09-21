@@ -6,7 +6,11 @@ public sealed class ClosedSentinelType(IClosedType type) : IClosedType
 {
     public IClosedType ElementType => type;
 
-    public TypeKind Kind => TypeKind.Sentinel;
+    public ClosedTypeKind Kind => ClosedTypeKind.Sentinel;
+
+    public MemberReference MemberReference => UnderlyingType;
+
+    public string Name => $"<sentinel>({UnderlyingType})";
 
     public ushort MemorySize => 0;
 
@@ -14,5 +18,5 @@ public sealed class ClosedSentinelType(IClosedType type) : IClosedType
 
     public TypeReference UnderlyingType => new SentinelType(type.UnderlyingType);
 
-    public override string ToString() => $"<sentinel>({UnderlyingType})";
+    public override string ToString() => Name;
 }

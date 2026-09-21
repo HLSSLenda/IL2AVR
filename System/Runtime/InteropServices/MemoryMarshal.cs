@@ -11,5 +11,6 @@ public static class MemoryMarshal
         where TFrom : allows ref struct
         where TTo : allows ref struct =>
             new(ref Unsafe.AsRef<TTo>(span.reference), span.Length);
-    public static unsafe ref T GetReference<T>(ReadOnlySpan<T> span) where T : allows ref struct => ref Unsafe.AsRef<T>(span.reference);
+    public static unsafe ref T GetReference<T>(Span<T> span) where T : allows ref struct => ref Unsafe.AsRef<T>(span.reference);
+    public static unsafe ref readonly T GetReference<T>(ReadOnlySpan<T> span) where T : allows ref struct => ref Unsafe.AsRef<T>(span.reference);
 }

@@ -6,7 +6,7 @@ public sealed class ClosedPointerType(IClosedType type) : IClosedType
 {
     public IClosedType ElementType => type;
 
-    public TypeKind Kind => TypeKind.Pointer;
+    public ClosedTypeKind Kind => ClosedTypeKind.Pointer;
 
     public ushort MemorySize => 2;
 

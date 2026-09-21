@@ -1,7 +1,8 @@
 namespace IL2AVR.IR;
 
-public record Number(IClosedType Type, ulong Value) : IValue
+public record Number(IClosedType Type, ulong Value) : ICompileTimeValue
 {
+    object ICompileTimeValue.Value => Value;
     public Number To(ClosedTypeSystem typeSystem, IClosedType numberType)
     {
         if (numberType.Equals(typeSystem.SByte))

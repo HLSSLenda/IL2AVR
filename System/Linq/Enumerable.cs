@@ -1,4 +1,3 @@
-using System;
 using System.Collections;
 using System.Collections.Generic;
 namespace System.Linq;
@@ -18,6 +17,29 @@ public static class Enumerable
         }
         RangeEnumerator GetEnumerator() => new(begin, end);
         IEnumerator<int> IEnumerable<int>.GetEnumerator() => GetEnumerator();
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+    public readonly struct WhereEnumerable<T>(IEnumerable<T> enumerable, Func<T, bool> predicate) : IEnumerable<T>
+    {
+        public readonly struct WhereEnumerator(IEnumerator<T> enumerator, Func<T, bool> predicate) : IEnumerator<T>
+        {
+            public T Current => Current;
+            readonly object IEnumerator.Current => Current;
+            public bool MoveNext()
+            {
+                if (!enumerator.MoveNext())
+                    return false;
+                while (!predicate(enumerator.Current))
+                {
+                    if (!enumerator.MoveNext())
+                        return false;
+                }
+                return true;
+            }
+            public void Reset() => enumerator.Reset();
+        }
+        WhereEnumerator GetEnumerator() => new(enumerable.GetEnumerator(), predicate);
+        IEnumerator<T> IEnumerable<T>.GetEnumerator() => GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
     public static bool Any<T>(this IEnumerable<T> enumerable) where T : allows ref struct =>
@@ -51,4 +73,6 @@ public static class Enumerable
 
     }
     public static RangeEnumerable Range(int start, int end) => new(start, end);
+
+    public static WhereEnumerable<T> Where<T>(this IEnumerable<T> enumerable, Func<T, bool> filter) => new(enumerable, filter);
 }

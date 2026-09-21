@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -19,5 +20,10 @@ public readonly struct IntelHexCompiler : IEmitter
     public void Compile(AVRCompiler machine, Stream stream)
     {
 
+    }
+
+    public bool Emit(IReadOnlyList<CompiledMethod> methods, Stream stream)
+    {
+        throw new NotImplementedException();
     }
 }

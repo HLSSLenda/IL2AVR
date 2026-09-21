@@ -8,7 +8,7 @@ public sealed class ClosedArrayType(IClosedType type, int length = -1) : IClosed
 
     public IClosedType ElementType => type;
 
-    public TypeKind Kind => TypeKind.Array;
+    public ClosedTypeKind Kind => ClosedTypeKind.Array;
 
     public ushort MemorySize => (ushort)(IsConstantLength ? length : 2);
 

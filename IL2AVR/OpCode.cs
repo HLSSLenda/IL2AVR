@@ -1,8 +1,12 @@
 namespace IL2AVR.IR;
 
+/// <summary>Represents an AVR assembly opcode instruction.</summary>
+/// <param name="Id">The opcode identifier.</param>
+/// <param name="LeftOperand">The left operand, if any.</param>
+/// <param name="RightOperand">The right operand, if any.</param>
 public readonly record struct OpCode(OpCodeId Id, IValue? LeftOperand = null, IValue? RightOperand = null) : IValue
 {
-    ClosedType IValue.Type => null!;
+    IClosedType IValue.Type => null!;
     public static int Size(OpCodeId id) => id switch
     {
         OpCodeId.ExtCall or OpCodeId.ExtJmp or OpCodeId.Lds or OpCodeId.Sts => 4,

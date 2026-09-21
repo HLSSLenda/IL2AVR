@@ -17,7 +17,7 @@ namespace IL2AVR;
 public delegate void ExternalImplementation(
     in CompilerBag bag,
     bool isInline,
-    IReadOnlyList<ClosedMethod>? callGraph,
+    IReadOnlyList<ClosedMethod> callGraph,
     InstructionStream instructionStream,
     IReadOnlyList<IValue> args
 );

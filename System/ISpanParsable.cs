@@ -13,6 +13,6 @@ public interface ISpanParsable<T> : IParsable<T> where T : ISpanParsable<T>, all
         }
         return TryParse(str.AsSpan(), out value);
     }
-    T? Parse(ReadOnlySpan<byte> str);
-    bool TryParse(ReadOnlySpan<byte> str, out T value);
+    T? Parse(ReadOnlySpan<char> str);
+    bool TryParse(ReadOnlySpan<char> str, out T value);
 }

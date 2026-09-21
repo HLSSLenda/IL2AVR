@@ -4,4 +4,5 @@ namespace System.Runtime.CompilerServices;
 public sealed class UnsafeAccessorAttribute(UnsafeAccessorKind kind) : Attribute
 {
     public readonly UnsafeAccessorKind Kind = kind;
+    public string? Name;
 }

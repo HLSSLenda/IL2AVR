@@ -1,4 +1,4 @@
-namespace System.Runtime;
+namespace System.Runtime.IL2AVR;
 
 [AttributeUsage(AttributeTargets.Method)]
 #pragma warning disable CS9113  // unread parameter; used by IL2AVR

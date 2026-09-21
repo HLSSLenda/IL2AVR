@@ -9,7 +9,7 @@ public sealed class ClosedField
     public readonly ClosedType DeclaringType;
     public readonly IClosedType FieldType;
 
-    internal ClosedField(FieldReference underlyingField, IReadOnlyDictionary<GenericParameter, ClosedType> declaringTypeGenericArguments)
+    internal ClosedField(FieldReference underlyingField, IReadOnlyDictionary<GenericParameter, IClosedType> declaringTypeGenericArguments)
     {
         UnderlyingField = underlyingField.Resolve();
         DeclaringType = (ClosedType)underlyingField.DeclaringType.Close(declaringTypeGenericArguments);

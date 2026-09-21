@@ -7,12 +7,18 @@ public abstract class TextWriter : IDisposable
     public virtual void Dispose()
     {
     }
-    public virtual void Write(byte chr)
+    public virtual void Write(char chr)
     {
     }
-    public virtual void Write(ReadOnlySpan<byte> chars)
+    public virtual void Write(bool value) => Write(value ? "True" : "False");
+    public virtual void Write(ReadOnlySpan<char> chars)
     {
-        foreach (byte b in chars)
+        foreach (char b in chars)
             Write(b);
+    }
+    public virtual void WriteLine(ReadOnlySpan<char> chars)
+    {
+        Write(chars);
+        Write('\n');
     }
 }
