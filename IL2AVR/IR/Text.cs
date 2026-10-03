@@ -9,5 +9,8 @@ public readonly record struct Text : ICompileTimeValue
     }
     public IClosedType Type { get; }
     public readonly string Value;
-    object ICompileTimeValue.Value => Value;
+    private readonly object Value()
+    {
+        return Value;
+    }
 }

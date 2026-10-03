@@ -117,7 +117,7 @@ public static class Extensions
             return new Null(type);
         if (IsNumberKind(type.Kind))
             return new Number(type, 0);
-        return new CompileTimeClosedTypeInstance((ClosedType)type);
+        return new CompileTimeObjectInstance((ClosedType)type);
     }
     public static bool Extends(this ClosedType child, ClosedType father)
     {
@@ -239,7 +239,7 @@ public static class Extensions
     /// <returns>The high byte of <paramref name="n" />.</returns>
     public static byte High(this ushort n) => (byte)(n >> 8);
 
-    // see TypeKind.cs
+    // see ClosedTypeKind.cs
     public static bool IsAggregateKind(this ClosedTypeKind kind) => kind == ClosedTypeKind.AggregateReference || kind == ClosedTypeKind.AggregateValue;
     public static bool IsBasicKind(this ClosedTypeKind kind) => kind >= ClosedTypeKind.TypedReference;
     public static bool IsReferenceKind(this ClosedTypeKind kind) =>
@@ -303,4 +303,5 @@ public static class Extensions
         where TFrom : unmanaged, allows ref struct
         where TTo : unmanaged, allows ref struct =>
             Unsafe.As<TFrom, TTo>(ref src);
+    public static ushort TotalMemory(this IProcessor processor) => (ushort)(processor.RamEnd - processor.RamStart);
 }

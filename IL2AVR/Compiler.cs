@@ -20,7 +20,7 @@ public sealed class Compiler
         HashSet<ClosedType> sizeoffed = [];
         Stack<ClosedMethod> pending = new();
         HashSet<ClosedMethod> visitedMethods = [];
-        pending.Push(new(module.EntryPoint, EmptyDictionary<GenericParameter, ClosedType>.Instance));
+        pending.Push(new(module.EntryPoint, EmptyDictionary<GenericParameter, IClosedType>.Instance));
         while (pending.TryPop(out ClosedMethod? method))
         {
             if (!visitedMethods.Add(method))
@@ -74,7 +74,7 @@ public sealed class Compiler
                         break;
                     case Code.Stfld:
                         if (kind != MethodKind.Constructor)
-                            ((FieldReference)instruction.Operand).DeclaringType.InstantiateGeneric(method.GenericArguments).IsImmutable = false;
+                            ((FieldReference)instruction.Operand).DeclaringType.Close(method.GenericArguments).IsImmutable = false;
                         break;
                     case Code.Sizeof:
                         sizeoffed.Add(((TypeReference)instruction.Operand).Close());
@@ -85,68 +85,16 @@ public sealed class Compiler
         CompilerBag bag = new(logger, options, module);
     }
 
-    public Compiler Define(string name, byte value)
-    {
-        return this;
-    }
-    public Compiler Define(string name, sbyte value)
-    {
-        return this;
-    }
-    public Compiler Define(string name, short value)
-    {
-        return this;
-    }
-    public Compiler Define(string name, ushort value)
-    {
-        return this;
-    }
-    public Compiler Define(string name, int value)
-    {
-        return this;
-    }
-    public Compiler Define(string name, uint value)
-    {
-        return this;
-    }
-    public Compiler Define(string name, long value)
-    {
-        return this;
-    }
-    public Compiler Define(string name, ulong value)
-    {
-        return this;
-    }
-    public Compiler Define(string name, float value)
-    {
-        return this;
-    }
-    public Compiler Define(string name, double value)
-    {
-        return this;
-    }
-    public Compiler Define(string name, char value)
-    {
-        return this;
-    }
-    public Compiler Define(string name, string value)
-    {
-        return this;
-    }
-    public Compiler Define(string name, ClosedType value)
-    {
-        return this;
-    }
-    public Compiler DefineMethod(string name, ClosedMethod value)
-    {
-        return this;
-    }
-    public Compiler DefineConstructor(string name, ClosedMethod value)
+    public Compiler Define(string name, ICompileTimeValue value)
     {
         return this;
     }
     public bool Emit<T>() where T : IEmitter, new()
     {
 
+    }
+    public Compiler OnILAnalysis(string name, Action<MethodDefinition, ILProcessor> action)
+    {
+        return this;
     }
 }

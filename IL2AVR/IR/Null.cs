@@ -12,5 +12,13 @@ public sealed class Null : ICompileTimeValue
     }
 
     public IClosedType Type { get; }
-    object? ICompileTimeValue.Value => null!;
+    public object? Value => null!;
+
+    public bool TrySerialize(Span<byte> span)
+    {
+        if (span.Length < 2)
+            return false;
+        span[0] = span[1] = 0;  // << 0 because it isnt cute :D
+        return true;
+    }
 }

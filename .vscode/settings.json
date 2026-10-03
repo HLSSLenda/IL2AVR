@@ -1,5 +1,5 @@
 {
     "dotrush.roslyn.projectOrSolutionFiles": [
-        "/home/jorge/hehehe/storage/emulated/0/IL2AVR/ArduinoSharp.sln"
+        "./ArduinoSharp.sln"
     ]
 }

@@ -24,6 +24,9 @@ namespace IL2AVR;
 /// </param>
 /// 
 public record CompilerOptions(
+    ModuleDefinition InputModule,
+    IProcessor Processor,
+    IReadOnlyCollection<ModuleDefinition>? AdditionalInputModules = null,
     BreakBehavior BreakBehavior = BreakBehavior.Break,
     IReadOnlyDictionary<string, ICompileTimeValue>? CompileTimeValueDefinitions = null,
     CompilerDiagnosticKind Diagnostics = CompilerDiagnosticKind.Fatal | CompilerDiagnosticKind.Error | CompilerDiagnosticKind.Warning,

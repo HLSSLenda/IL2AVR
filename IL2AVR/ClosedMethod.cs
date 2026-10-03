@@ -32,8 +32,8 @@ public sealed class ClosedMethod : IClosedEntity, IEquatable<ClosedMethod>, IEqu
     internal ClosedMethod(MethodReference method, IReadOnlyDictionary<GenericParameter, IClosedType>? declaringTypeGenericArguments = null)
     {
         UnderlyingMethod = method.Resolve();
-        Dictionary<GenericParameter, ClosedType> args = new((declaringTypeGenericArguments ??= EmptyDictionary<GenericParameter, ClosedType>.Instance).Count + UnderlyingMethod.GenericParameters.Count, new GenericParameterEqualityComparer());
-        foreach (KeyValuePair<GenericParameter, ClosedType> kv in declaringTypeGenericArguments)
+        Dictionary<GenericParameter, IClosedType> args = new((declaringTypeGenericArguments ??= EmptyDictionary<GenericParameter, IClosedType>.Instance).Count + UnderlyingMethod.GenericParameters.Count, new GenericParameterEqualityComparer());
+        foreach (KeyValuePair<GenericParameter, IClosedType> kv in declaringTypeGenericArguments)
             args[kv.Key] = kv.Value;
         if (method is GenericInstanceMethod t)
             for (int i = 0; i < UnderlyingMethod.GenericParameters.Count; ++i)
@@ -42,7 +42,7 @@ public sealed class ClosedMethod : IClosedEntity, IEquatable<ClosedMethod>, IEqu
         IEnumerable<ClosedParameter> parameters = method.Parameters.Select(param => new ClosedParameter(param, GenericArguments));
         Parameters = UnderlyingMethod.IsStatic ?
             [.. parameters] :
-            [new(new ParameterDefinition(method.DeclaringType), new Dictionary<GenericParameter, ClosedType>()), .. parameters];
+            [new(new ParameterDefinition(method.DeclaringType), EmptyDictionary<GenericParameter, IClosedType>.Instance), .. parameters];
         ReturnType = method.ReturnType.Close(declaringTypeGenericArguments);
     }
 

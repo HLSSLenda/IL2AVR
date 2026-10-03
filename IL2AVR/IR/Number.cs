@@ -1,8 +1,12 @@
+using System;
+using System.Runtime.InteropServices;
+
 namespace IL2AVR.IR;
 
 public record Number(IClosedType Type, ulong Value) : ICompileTimeValue
 {
-    object ICompileTimeValue.Value => Value;
+    object? ICompileTimeValue.Value => Value;
+
     public Number To(ClosedTypeSystem typeSystem, IClosedType numberType)
     {
         if (numberType.Equals(typeSystem.SByte))
@@ -24,4 +28,26 @@ public record Number(IClosedType Type, ulong Value) : ICompileTimeValue
         throw new WtfException();
     }
     public override string ToString() => Value.ToString();
+
+    public bool TrySerialize(Span<byte> span)
+    {
+        if (span.Length < Type.Size)
+            return false;
+        switch (Type.Size)
+        {
+            case 1:
+                MemoryMarshal.Write(span, (byte)Value);
+                break;
+            case 2:
+                MemoryMarshal.Write(span, (ushort)Value);
+                break;
+            case 4:
+                MemoryMarshal.Write(span, (uint)Value);
+                break;
+            case 8:
+                MemoryMarshal.Write(span, (ulong)Value);
+                break;
+        }
+        return true;
+    }
 }

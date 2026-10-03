@@ -1,4 +1,4 @@
-namespace IL2AVR.IR;
+namespace IL2AVR;
 
 public enum MethodKind
 {
