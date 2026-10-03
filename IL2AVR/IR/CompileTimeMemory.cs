@@ -9,14 +9,15 @@ public sealed class CompileTimeMemory : IDisposable
     private readonly ArrayPool<byte> _pool;
     private byte[]? _array;
     public readonly CompileTimeMemoryLocalOrder MemoryOrder;
-    private readonly List<CompileTimeLocal> _objects;
-    public IReadOnlyList<CompileTimeLocal> Objects => _objects;
+    private readonly LinkedList<CompileTimeLocal> _objects;
+    public IReadOnlyCollection<CompileTimeLocal> Objects => _objects;
     public int AdderOffset;
-    public CompileTimeMemory(int size, CompileTimeMemoryLocalOrder order = CompileTimeMemoryLocalOrder.Down, ArrayPool<byte>? pool = null)
+    public CompileTimeMemory(ushort size, CompileTimeMemoryLocalOrder order = CompileTimeMemoryLocalOrder.Down, ArrayPool<byte>? pool = null)
     {
         _pool = pool ?? ArrayPool<byte>.Shared;
         _array = _pool.Rent(size);
-        _objects = [new(null, RealOffset(0))];
+        _objects = new();
+        _objects.AddFirst(new CompileTimeLocal(new Void(size), RealOffset(0)));
         MemoryOrder = order;
     }
 
@@ -54,20 +55,26 @@ public sealed class CompileTimeMemory : IDisposable
     public CompileTimeLocal Add(ICompileTimeValue value)
     {
         ThrowIfDisposed();
-        foreach (CompileTimeLocal local in _objects)
+        LinkedListNode<CompileTimeLocal> localNode = _objects.First!;
+        CompileTimeLocal local;
+        while (true)
         {
-            if (!local.IsUsed && value.Type.Size <= local.Type.Size)
+            local = localNode.Value;
+            if (local.Type is Void && value.Type.Size <= local.Type.Size)
             {
-                local.IsUsed = true;
+                ushort size = (ushort)(local.Type.Size - value.Type.Size);
+                if (size > 0)
+                    // we split the used and unused memory
+                    _objects.AddAfter(localNode, new CompileTimeLocal(new Void(size)));
                 local.Value = value;
                 return local;
             }
+            if (localNode.Next is null)
+                break;
         }
-        CompileTimeLocal lastLocal = _objects[^ - 1];
-        CompileTimeLocal newLocal;
-        if (VirtualOffset(lastLocal.Offset) + value.Type.Size > _array!.Length)
+        if (VirtualOffset(offset) + value.Type.Size > _array!.Length)
             throw new InvalidOperationException("Out of memory!");
-        newLocal = new(value, RealOffset(VirtualOffset(lastLocal.Offset) + value.Type.Size));
+        CompileTimeLocal newLocal = new(value, );
         _objects.Add(newLocal);
         if (!newLocal.TrySerialize(new(_array, RealOffset(newLocal.Offset), value.Type.Size)))
             throw new WtfException();
