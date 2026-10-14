@@ -9,6 +9,7 @@ public sealed class CompileTimeLocal : ICompileTimeValue
         Value = value;
         Offset = offset;
     }
+    public readonly int Offset;
     public IClosedType Type => Value.Type;
     object? ICompileTimeValue.Value => Value;
     public bool TrySerialize(Span<byte> span) => Value is not null && Value.TrySerialize(span);

@@ -24,17 +24,17 @@ public sealed class CompileTimeMethodEvaluator : IDisposable
         public IntermediateInstruction? Instruction { get; internal set; } = Method.Body.EntryInstruction;
         public readonly ushort FramePointer = framePointer;
     }
-    public CompileTimeMethodEvaluator(ClosedMethod method, IReadOnlyList<ICompileTimeValue> arguments, CompileTimeMemory eeprom, int memorySize, int maxCallDepth = byte.MaxValue, ArrayPool<byte>? arrayPool = null)
+    public CompileTimeMethodEvaluator(ClosedMethod method, IReadOnlyList<ICompileTimeValue> arguments, CompileTimeMemory flash, int memorySize, int maxCallDepth = byte.MaxValue, ArrayPool<byte>? arrayPool = null)
     {
         if (arguments.Count != method.Parameters.Count)
             throw new ArgumentException($"Expected {method.Parameters.Count} parameters, got {arguments.Count}", nameof(arguments));
         for (int i = 0; i < method.Parameters.Count; ++i)
             if (!arguments[i].Type.CanConvertTo(method.Parameters[i].ParameterType))
                 throw new InvalidOperationException($"Parameter {i} of type {method.Parameters[i].ParameterType} isn't compatible with {arguments[i].Type}.");
-        _eeprom = eeprom;
+        _flash = flash;
         Arguments = arguments;
         MaxCallDepth = maxCallDepth;
-        Memory = new(memorySize, pool: arrayPool);
+        Memory = new((ushort)memorySize, pool: arrayPool);
         Method = method;
         Reset();
     }
@@ -43,7 +43,7 @@ public sealed class CompileTimeMethodEvaluator : IDisposable
 
     public readonly IReadOnlyList<ICompileTimeValue> Arguments;
 
-    private readonly CompileTimeMemory _eeprom;
+    private readonly CompileTimeMemory _flash;
     private readonly MetaStack<StackFrame> _frames = new([]);
     public IReadOnlyList<StackFrame> Frames => _frames;
     public readonly int MaxCallDepth;
