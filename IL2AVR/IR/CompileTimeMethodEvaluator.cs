@@ -18,11 +18,27 @@ public sealed class CompileTimeMethodEvaluator : IDisposable
         public readonly StepResult Result = result;
         public readonly ICompileTimeValue? Value = value;
     }
-    public record struct StackFrame(ClosedMethod Method, IReadOnlyList<ICompileTimeValue> arguments, ushort framePointer)
+    public sealed class StackFrame
     {
-        public readonly IReadOnlyList<ICompileTimeValue> Arguments => arguments;
-        public IntermediateInstruction? Instruction { get; internal set; } = Method.Body.EntryInstruction;
-        public readonly ushort FramePointer = framePointer;
+        public readonly IReadOnlyList<ICompileTimeValue> Arguments;
+        public IntermediateInstruction? Instruction { get; internal set; }
+        public readonly ushort FramePointer;
+
+        public readonly ClosedMethod Method;
+        public readonly IReadOnlyList<CompileTimeLocal> Locals;
+
+        private readonly Stack<CompileTimeLocal> 
+
+        public StackFrame(CompileTimeMemory memory, ClosedMethod method, IReadOnlyList<ICompileTimeValue> arguments, ushort framePointer)
+        {
+            FramePointer = framePointer;
+            Method = method;
+            Instruction = method.Body.EntryInstruction;
+            List<CompileTimeLocal> locals = new(method.Body.Variables.Count);
+            foreach (ClosedVariable variable in method.Body.Variables)
+                locals.Add(memory.Add(variable.VariableType.DefaultCompileTimeValue()));
+            Locals = locals;
+        }
     }
     public CompileTimeMethodEvaluator(ClosedMethod method, IReadOnlyList<ICompileTimeValue> arguments, CompileTimeMemory flash, int memorySize, int maxCallDepth = byte.MaxValue, ArrayPool<byte>? arrayPool = null)
     {
@@ -54,7 +70,7 @@ public sealed class CompileTimeMethodEvaluator : IDisposable
     {
         ObjectDisposedException.ThrowIf(Memory is null, this);
         _frames.Clear();
-        _frames.Add(new(Method, Arguments, (ushort)(Memory.Length - 1)));
+        _frames.Add(new(Memory, Method, Arguments, (ushort)(Memory.Length - 1)));
     }
     public CurrentStep Step()
     {

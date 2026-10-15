@@ -1,26 +1,39 @@
 using Mono.Cecil;
-using Mono.Cecil.Cil;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 namespace IL2AVR;
 
+/// <summary>Represents a fully closed aggregate type.</summary>
 public sealed class ClosedType : IEquatable<ClosedType>, IEquatable<TypeReference>, IClosedType
 {
     private static readonly Dictionary<TypeReference, ClosedType> cachedTypes = new(18, new TypeReferenceEqualityComparer());
 
     private ushort addFieldOffset = 0;
     private readonly List<ClosedField> fields;
+    /// <summary>Every field used of this type.</summary>
     public IReadOnlyCollection<ClosedField> Fields => fields;
+    /// <summary>Every generic argument used for the instantiation of this type.</summary>
     public readonly IReadOnlyDictionary<GenericParameter, IClosedType> GenericArguments;
-    public readonly ushort InlineArraySize;
+    /// <summary><see langword="true" /> if this type is a primitive type.</summary>
     public readonly bool IsBasic;
+    /// <summary><see langword="true" /> if this type is immutable, meaning that no field is changed.</summary>
+    /// <remarks>
+    /// The type can be immutable even if there are methods that mutate fields.
+    /// What makes a type immutable is the code itself not calling method that mutate fields,
+    /// or not mutating fields by themselves.
+    /// This doesn't apply for <see cref="IR.CompileTimeObjectInstance" /> because it's a purely compile-time construct.
+    /// </remarks>
     public bool IsImmutable { get; internal set; } = true;
+    /// <inheritdoc />
     public string Name => UnderlyingType.Name;
+    /// <inheritdoc />
     public ushort MemorySize { get; private set; }
+    /// <inheritdoc />
     public ushort Size { get; private set; }
     public readonly TypeDefinition UnderlyingType;
+    /// <inheritdoc />
     public MemberReference MemberReference => UnderlyingType;
 
     internal ClosedType(TypeReference type, ushort size = 0, ClosedTypeKind kind = ClosedTypeKind.AggregateReference)
@@ -69,11 +82,12 @@ public sealed class ClosedType : IEquatable<ClosedType>, IEquatable<TypeReferenc
         Size = UnderlyingType.IsReference() ? (ushort)2 : MemorySize;
         cachedTypes[type] = this;
     }
-    public static ClosedType Get(TypeReference type)
+    /// <summary>Gets a <see cref="ClosedType" /> instance.</summary>
+    public static ClosedType Get(TypeReference type)cmpq
     {
         ref ClosedType? closedType = ref CollectionsMarshal.GetValueRefOrAddDefault(cachedTypes, type, out bool exists);
         if (!exists)
-            closedType = new(type);
+            closedType = new(type, kind: type.IsReference() ? ClosedTypeKind.AggregateReference : ClosedTypeKind.AggregateValue);
         return closedType!;
     }
     public static bool operator ==(ClosedType lhs, ClosedType rhs) => lhs.Equals(rhs);
@@ -155,6 +169,8 @@ public sealed class ClosedType : IEquatable<ClosedType>, IEquatable<TypeReferenc
     public ClosedTypeKind Kind { get; }
 
     TypeReference IClosedType.UnderlyingType => UnderlyingType;
+
+    public DataLocation Location => throw new NotImplementedException();
 
     public bool Equals(TypeReference? other) =>
         UnderlyingType.MetadataToken == other?.MetadataToken && UnderlyingType.Module == other.Module &&

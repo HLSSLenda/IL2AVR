@@ -8,11 +8,15 @@ namespace IL2AVR;
 
 public static class Extensions
 {
-    /// Closes an arbitrary <see cref="TypeReference" />. 
+    /// <summary>Closes an arbitrary <see cref="TypeReference" />.</summary>
+    /// <param name="self">The <see cref="TypeReference" /> to close.</param>
+    /// <param name="genericArguments">The generic arguments that's used for this entire type instance.</param>
+    /// <returns>A <see cref="IClosedType" /> representing the closed type.</returns>
     public static IClosedType Close(this TypeReference self, IReadOnlyDictionary<GenericParameter, IClosedType>? genericArguments = null)
     {
         genericArguments ??= EmptyDictionary<GenericParameter, IClosedType>.Instance;
         Stack<ClosedTypeKind> kinds = new();
+        // first we decompose the type into separate parts
         while (true)
         {
             if (self is ArrayType t1)
@@ -33,6 +37,7 @@ public static class Extensions
             else
                 break;
         }
+        // now we make a concrete GenericInstanceType from the type
         GenericInstanceType newType = new(self);
         if (self is GenericInstanceType type)
         {
@@ -60,7 +65,7 @@ public static class Extensions
                 newType.GenericArguments.Add(t.UnderlyingType);
             }
         }
-
+        // now we construct the final type
         IClosedType finalType = ClosedType.Get(newType);
         while (kinds.TryPop(out ClosedTypeKind kind))
         {
@@ -83,7 +88,6 @@ public static class Extensions
     /// <summary>Checks if a closed type can be converted to another.</summary>
     /// <param name="src">The source type.</param>
     /// <param name="dst">The destination type.</param>
-    /// <param name="typeSystem">The core type system.</param>
     /// <returns><see langword="true" /> if <paramref name="src" /> can be converted to <paramref name="dst"/>.</returns>
     /// <remarks>
     /// A type can be converted to another if:
@@ -107,6 +111,10 @@ public static class Extensions
         return false;
     }
     public static ClosedMethod Close(this MethodReference method, IReadOnlyDictionary<GenericParameter, IClosedType>? genericArguments = null) => ClosedMethod.Get(method, genericArguments);
+    /// <summary>Gets the default compile-time value for a <see cref="IClosedType" />.</summary>
+    /// <param name="type">The type.</param>
+    /// <returns><see cref="Null" /> for reference-types, <see cref="Number" /> for primitive types, and an unitialized <see cref="CompileTimeObjectInstance" /> for value types.</returns>
+    /// <exception cref="InvalidOperationException">Tried to get the default value of a sentinel or the void type.</exception>
     public static ICompileTimeValue DefaultCompileTimeValue(this IClosedType type)
     {
         if (type.Kind == ClosedTypeKind.Sentinel)
@@ -202,6 +210,7 @@ public static class Extensions
         }
         return null;
     }
+
     public static MethodDefinition? GetMethod(
         this TypeDefinition type,
         TypeReference returnType,
@@ -213,6 +222,10 @@ public static class Extensions
         method.Name == name &&
         method.GenericParameters.Count == genericCount &&
         method.Parameters.Select(static param => param.ParameterType).SequenceEqual(parameters));
+
+    /// <summary>Gets the root element type of a <see cref="IClosedType" />.</summary>
+    /// <param name="type">The closed type.</param>
+    /// <returns>The root closed type.</returns>
     public static ClosedType GetRootElementType(this IClosedType type)
     {
         while (type is not ClosedType || type.ElementType is not null)
@@ -256,30 +269,6 @@ public static class Extensions
     /// <returns>The low byte of <paramref name="n" />.</returns>
     public static byte Low(this ushort n) => (byte)(n & 0xff);
 
-    /*public static ClosedType InstantiateGeneric(this TypeReference self, IReadOnlyList<ClosedType>? genericArguments)
-    {
-        if (genericArguments is null)
-            return ClosedType.Get(self);
-        (instantiator ??= new(1)).Clear();
-        if (genericArguments.Count > 0)
-            instantiator[genericArguments[0].UnderlyingReference.DeclaringType] = genericArguments;
-        return InstantiateGeneric(self, instantiator);
-    }
-    public static ClosedType InstantiateGeneric(this TypeReference self, IReadOnlyDictionary<MemberReference, IReadOnlyList<ClosedType>>? generics)
-    {
-        if (generics is null)
-            return ClosedType.Get(self);
-        if (self is GenericParameter genericParameter)
-            return generics[(MemberReference)genericParameter.DeclaringMethod ?? genericParameter.DeclaringType][genericParameter.Position];
-        if (self is GenericInstanceType type)
-        {
-            GenericInstanceType newType = new(self);
-            foreach (TypeReference tgeneric in type.GenericArguments)
-                newType.GenericArguments.Add(InstantiateGeneric(tgeneric, generics).UnderlyingReference);
-            return ClosedType.Get(newType);
-        }
-        return ClosedType.Get(self);
-    }*/
     public static void Log<T>(T logger, CompilerDiagnosticCollection diagnostics) where T : ILogger
     {
         if (diagnostics.Fatals is not null)
@@ -298,10 +287,20 @@ public static class Extensions
         type == typeSystem.Int16 || type == typeSystem.Int32 || type == typeSystem.Int64 || type == typeSystem.IntPtr || type == typeSystem.SByte;
     public static bool IsUnsigned(this TypeReference type, TypeSystem typeSystem) =>
         type == typeSystem.Byte || type == typeSystem.UInt16 || type == typeSystem.UInt32 || type == typeSystem.UInt64 || type == typeSystem.UIntPtr;
+    
     // could've used Unsafe.As directly, but it only works on ref, and idc about copies bc it'll be used for small types only (stack float reinterpretation)
+    /// <summary>Reinterprets a value of a specific type as another type.</summary>
+    /// <typeparam name="TFrom">The source parameter type.</typeparam>
+    /// <typeparam name="TTo">The destination return type.</typeparam>
+    /// <param name="src">The value to reinterpret.</param>
+    /// <returns><paramref name="src" /> reinterpreted as <typeparamref name="TTo" />.</returns>
     public static TTo Reinterpret<TFrom, TTo>(this TFrom src)
         where TFrom : unmanaged, allows ref struct
         where TTo : unmanaged, allows ref struct =>
             Unsafe.As<TFrom, TTo>(ref src);
+
+    /// <summary>Gets the total SRAM memory of a processor.</summary>
+    /// <param name="processor">The processor.</param>
+    /// <returns>The total SRAM memory.</returns>
     public static ushort TotalMemory(this IProcessor processor) => (ushort)(processor.RamEnd - processor.RamStart);
 }

@@ -10,6 +10,8 @@ public interface IClosedType : IClosedEntity
     IClosedType ElementType { get; }
     /// <summary>The type kind.</summary>
     ClosedTypeKind Kind { get; }
+    /// <summary>The type storage location.</summary>
+    DataLocation Location { get; }
     /// <summary>The total/real memory size that this type holds.</summary>
     ushort MemorySize { get; }
     /// <summary>The compile-time size that this type holds.</summary>

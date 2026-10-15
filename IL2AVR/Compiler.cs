@@ -8,7 +8,10 @@ namespace IL2AVR;
 
 public sealed class Compiler
 {
+    private readonly record struct Hook<T>(string Name, T value);
+
     private readonly HashSet<ClosedMethod> _compiledMethods = [];
+    private readonly List<Hook<Action<MethodDefinition, ILProcessor>>> _ilPreprocessingHooks = [];
 
     public Compiler(ILogger logger, CompilerOptions options, ModuleDefinition module)
     {
@@ -17,6 +20,8 @@ public sealed class Compiler
         if (!module.EntryPoint.HasBody)
             throw new ArgumentException("Entry point must have a body.");
  
+        CompilerBag bag = new(logger, options, module);
+        MethodDefinition finalize = bag.Finalize;
         HashSet<ClosedType> sizeoffed = [];
         Stack<ClosedMethod> pending = new();
         HashSet<ClosedMethod> visitedMethods = [];
@@ -34,7 +39,7 @@ public sealed class Compiler
                 kind = MethodKind.Constructor;
             else if (method.UnderlyingMethod.Name == "Finalize" &&
                     method.UnderlyingMethod.Overrides.Count > 0 &&
-                    method.UnderlyingMethod.Overrides.Any(ovr => ovr.MetadataToken == fuck) &&
+                    method.UnderlyingMethod.Overrides.Any(ovr => ovr.MetadataToken == finalize.MetadataToken) &&
                     method.UnderlyingMethod.IsNewSlot)
                 kind = MethodKind.Finalizer;
             else
@@ -82,7 +87,6 @@ public sealed class Compiler
                 }
             }
         }
-        CompilerBag bag = new(logger, options, module);
     }
 
     public Compiler Define(string name, ICompileTimeValue value)
@@ -95,6 +99,7 @@ public sealed class Compiler
     }
     public Compiler OnILAnalysis(string name, Action<MethodDefinition, ILProcessor> action)
     {
+        _ilPreprocessingHooks.Add(new(name, action));
         return this;
     }
 }

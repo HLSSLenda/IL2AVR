@@ -40,7 +40,8 @@ public sealed class CompileTimeMemory : IDisposable
             return _array!.Length;
         }
     }
-    public ReadOnlySpan<byte> Memory
+
+    public ReadOnlySpan<byte> FullMemory
     {
         get
         {
@@ -49,34 +50,93 @@ public sealed class CompileTimeMemory : IDisposable
         }
     }
 
+    public ReadOnlySpan<byte> Memory
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return MemoryOrder == CompileTimeMemoryLocalOrder.Down ?
+                new(_array!, 0, StartPointer) :
+                new(_array!, StartPointer, _array!.Length - StartPointer);
+        }
+    }
+
+    private int _bytesOccupied = -1;
+    public int BytesOccupied
+    {
+        get
+        {
+            ThrowIfDisposed();
+            if (_bytesOccupied != -1)
+                return _bytesOccupied;
+            LinkedListNode<CompileTimeLocal>? localNode = _objects.First!;
+            ushort offset = 0;
+            ushort sp = (ushort)VirtualStartPointer();
+            _bytesOccupied = 0;
+            while (localNode is not null)
+            {
+                CompileTimeLocal local = localNode.Value;
+                if (offset < sp && local.Type is not Void)
+                    _bytesOccupied += local.Type.Size;
+                offset += (ushort)local.Offset;
+                localNode = localNode.Next;
+            }
+            return _bytesOccupied;
+        }
+    }
+
+    public int LastOffset
+    {
+        get
+        {
+            if (_lastAddRearOffset != -1)
+                return _lastAddRearOffset;
+            LinkedListNode<CompileTimeLocal>? localNode = _objects.Last!;
+            ushort offset = 0;
+            ushort sp = (ushort)VirtualStartPointer();
+            while (localNode.Value.Offset >= 
+        }
+    }
+
     private int RealOffset(int voffset) => MemoryOrder == CompileTimeMemoryLocalOrder.Down ? voffset : -voffset + _array!.Length - 1;
+    private int VirtualStartPointer() => MemoryOrder == CompileTimeMemoryLocalOrder.Down ? VirtualOffset(StartPointer) : StartPointer;
     private int VirtualOffset(int roffset) => MemoryOrder == CompileTimeMemoryLocalOrder.Down ? roffset : _array!.Length - 1 - roffset;
 
+    private int _lastAddRearOffset = -1;
+    private bool _canRearOffsetBeUsed = false;
     public CompileTimeLocal Add(ICompileTimeValue value)
     {
         ThrowIfDisposed();
-        LinkedListNode<CompileTimeLocal> localNode = _objects.First!;
-        CompileTimeLocal local;
-        ushort offset = 0;
-        while (true)
+        _bytesOccupied = -1;
+        ushort sp = (ushort)VirtualStartPointer();
+        ushort offset;
+        if (_lastAddRearOffset == -1)
         {
-            local = localNode.Value;
-            if (offset >= StartPointer && local.Type is Void && value.Type.Size <= local.Type.Size)
+            LinkedListNode<CompileTimeLocal>? localNode = _objects.First!;
+            offset = 0;
+            while (localNode is not null)
             {
-                ushort size = (ushort)(local.Type.Size - value.Type.Size);
-                if (size > 0)
-                    // we split the used and unused memory
-                    _objects.AddAfter(localNode, new CompileTimeLocal(new Void(size), local.Offset + size));
-                local.Value = value;
-                return local;
+                CompileTimeLocal local = localNode.Value;
+                if (offset >= sp && local.Type is Void && value.Type.Size <= local.Type.Size)
+                {
+                    ushort size = (ushort)(local.Type.Size - value.Type.Size);
+                    if (size > 0)
+                        // we split the used and unused memory
+                        _objects.AddAfter(localNode, new CompileTimeLocal(new Void(size), local.Offset + size));
+                    local.Value = value;
+                    return local;
+                }
+                offset += (ushort)local.Offset;
+                localNode = localNode.Next;
             }
-            if (localNode.Next is null)
-                break;
         }
-        offset = Math.Max(offset, StartPointer);
+        else
+            offset = (ushort)_lastAddRearOffset;
+        offset = Math.Max(offset, sp);
         if (VirtualOffset(offset) + value.Type.Size > _array!.Length)
             throw new InvalidOperationException("Out of memory!");
-        CompileTimeLocal newLocal = new(value, offset + value.Type.Size);
+        _canRearOffsetBeUsed = true;
+        CompileTimeLocal newLocal = new(value, _lastAddRearOffset = offset + value.Type.Size);
         _objects.AddLast(newLocal);
         if (!newLocal.TrySerialize(new(_array, RealOffset(newLocal.Offset), value.Type.Size)))
             throw new WtfException();
@@ -86,11 +146,13 @@ public sealed class CompileTimeMemory : IDisposable
     public bool Remove(ICompileTimeValue value)
     {
         ThrowIfDisposed();
+        _bytesOccupied = -1;
+        _canRearOffsetBeUsed = false;
         LinkedListNode<CompileTimeLocal>? node = _objects.First;
         while (node is not null)
         {
             CompileTimeLocal local = node.Value;
-            if (object.ReferenceEquals(value, local.Value))
+            if (object.ReferenceEquals(value, node.ValueRef.Value))
             {
                 int newOffset = local.Offset;
                 ushort totalFreed = local.Type.Size;
@@ -111,11 +173,5 @@ public sealed class CompileTimeMemory : IDisposable
             node = node.Next;
         }
         return false;
-    }
-
-    public bool Pop()
-    {
-        ThrowIfDisposed();
-
     }
 }

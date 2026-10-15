@@ -1,4 +1,3 @@
-using IL2AVR.IR;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using System;
@@ -7,6 +6,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 namespace IL2AVR;
 
+/// <summary>Represents a closed method.</summary>
 public sealed class ClosedMethod : IClosedEntity, IEquatable<ClosedMethod>, IEquatable<MethodReference>
 {
     private static readonly Dictionary<MethodReference, ClosedMethod> _methods = new(new MethodReferenceEqualityComparer());
@@ -28,7 +28,6 @@ public sealed class ClosedMethod : IClosedEntity, IEquatable<ClosedMethod>, IEqu
     private readonly HashSet<ClosedType> _thrownExceptions;
     public IReadOnlyCollection<ClosedType> ThrownExceptions => _thrownExceptions;
 
-    // TODO: Cache this the same way ClosedType gets cached
     internal ClosedMethod(MethodReference method, IReadOnlyDictionary<GenericParameter, IClosedType>? declaringTypeGenericArguments = null)
     {
         UnderlyingMethod = method.Resolve();
